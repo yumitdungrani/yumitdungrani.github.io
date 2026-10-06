@@ -29,6 +29,8 @@ const META_24H = ['whatsapp', 'instagram', 'facebook'];
 const MSG_MAX = 3000; // characters kept per message
 const MSG_KEEP = 50; // messages kept per buyer, so each record stays well under the 256 KB limit
 const CAP = 25000; // records the shared database holds
+// The app now lives outside Claude; this copy only points there.
+const MOVED_TO = 'https://yumitdungrani.github.io/';
 const PLACES = {
   'United Kingdom': ['London', 'Birmingham', 'Manchester', 'Glasgow', 'Leeds', 'Edinburgh'],
   'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah'],
@@ -1822,7 +1824,8 @@ function viewHtml() {
   }
   const v = S.route.view;
   const body = v === 'cities' ? citiesView() : v === 'city' ? cityView(S.route.id) : v === 'buyers' ? buyersView() : v === 'leads' ? leadsView() : v === 'calendar' ? calendarView() : v === 'reports' ? reportsView() : v === 'sequence' ? sequenceView() : v === 'connections' ? connectionsView() : v === 'orders' ? ordersView() : v === 'prices' ? pricesView() : v === 'trips' ? tripsView() : v === 'trip' ? tripView(S.route.id) : todayView();
-  return (S.mode === 'local' ? `<div class="banner">${ico('alert')}<p><b>Practice mode.</b> This copy can't reach your saved data, so nothing you do here is kept. Open Ark Diamond Outreach in Claude to work with your real cities and leads.</p></div>` : '') + body;
+  const moved = !S.device && MOVED_TO ? `<div class="banner">${ico('alert')}<p><b>Your app has moved.</b> Use Ark Diamond from your iPhone home screen or at <a href="${MOVED_TO}" target="_blank" rel="noopener">yumitdungrani.github.io</a>. Your buyers, orders and replies are kept there now, and this copy in Claude is no longer updated.</p></div>` : '';
+  return moved + (S.mode === 'local' ? `<div class="banner">${ico('alert')}<p><b>Practice mode.</b> This copy can't reach your saved data, so nothing you do here is kept. Open Ark Diamond Outreach in Claude to work with your real cities and leads.</p></div>` : '') + body;
 }
 
 /* ---------- small builders ---------- */
