@@ -1,15 +1,15 @@
-/* The jewel box: the inside of a fine-jewellery presentation case. Midnight sapphire velvet, champagne-gold foil,
-   ivory lettering. One deliberate theme in every light. Titles and figures in a Didone, the rest in a quiet geometric sans.
+/* Ivory card stock, sapphire ink and antique-gold foil: the paper of a fine jeweller's price list.
+   One deliberate light theme, the same in every light. Titles and figures in a Didone, the rest in a quiet geometric sans.
    Desktop keeps a velvet sidebar beside the working column; phone gets a slim top bar, a bottom tab bar and bottom sheets. */
 :root{
-  color-scheme:dark;
-  --bg:#0B1124; --surface:#111934; --surface-2:#18213F; --ink:#F3EEE3; --ink-2:#C8C1B2; --ink-3:#9A9483; --line:#263052;
-  --line-gold:rgba(214,182,108,.34);
-  --accent:#D6B66C; --accent-ink:#18130A; --accent-soft:#2B2617;
-  --gold:#D6B66C; --gold-soft:#2B2617;
-  --good:#79C79C; --good-soft:#10301F; --warn:#E8B86A; --warn-soft:#33280F; --bad:#EF8A7C; --bad-soft:#3A1916; --on-bad:#2A0905;
-  --focus:#E8CF8E; --scrim:rgba(3,6,15,.66);
-  --shadow:0 1px 2px rgba(0,0,0,.45),0 18px 48px rgba(0,0,0,.55);
+  color-scheme:light;
+  --bg:#F7F4EE; --surface:#FFFFFF; --surface-2:#F1EDE5; --ink:#161C30; --ink-2:#4A5064; --ink-3:#6B7080; --line:#E5DFD3;
+  --line-gold:rgba(138,100,32,.30);
+  --accent:#8A6420; --accent-ink:#FFFBF2; --accent-soft:#F3EAD6;
+  --gold:#8A6420; --gold-soft:#F3EAD6;
+  --good:#1E7A4C; --good-soft:#E3F2E9; --warn:#8F5E00; --warn-soft:#FBF0D8; --bad:#B42318; --bad-soft:#FCE7E4; --on-bad:#FFFFFF;
+  --focus:#8A6420; --scrim:rgba(22,28,48,.42);
+  --shadow:0 1px 2px rgba(22,28,48,.08),0 18px 48px rgba(22,28,48,.16);
   /* the QR code stays dark-on-white so phones can scan it */
   --qr-paper:#FFFFFF; --qr-ink:#121A2B;
   --font-display:"Bodoni Moda","Bodoni 72",Didot,"Libre Bodoni",Georgia,serif;
@@ -385,12 +385,12 @@ textarea.input{width:100%;min-height:120px;resize:vertical;line-height:1.5}
 .cities.small .city-btn b{font-size:17px}
 .inline-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px}
 .inline-form .field{flex:1 1 200px}
-.mapbox{position:relative;isolation:isolate;height:400px;overflow:hidden;border:1px solid var(--line-gold);border-radius:12px;background:#0E152E}
+.mapbox{position:relative;isolation:isolate;height:400px;overflow:hidden;border:1px solid var(--line-gold);border-radius:12px;background:var(--surface-2)}
 .mapbox.off{display:grid;place-items:center;height:auto;min-height:72px;padding:16px;background:var(--surface)}
 .smap{position:absolute;inset:0}
-.smap.leaflet-container{background:#0E152E;font:13px/1.4 var(--font-body)}
-/* OpenStreetMap's light map, turned to night in the app's sapphire: dark land, pale labels, cool roads */
-.smap .leaflet-tile-pane{filter:invert(.94) grayscale(1) sepia(.5) hue-rotate(180deg) saturate(2) brightness(.95) contrast(.88)}
+.smap.leaflet-container{background:var(--surface-2);font:13px/1.4 var(--font-body)}
+/* OpenStreetMap's map, quietened to warm greys so the gold and green shop dots stand out */
+.smap .leaflet-tile-pane{filter:grayscale(.75) sepia(.15) brightness(1.02) contrast(.92)}
 .smap .leaflet-bar{border:1px solid var(--line-gold);border-radius:10px;box-shadow:none;overflow:hidden}
 .smap .leaflet-bar a{width:34px;height:34px;line-height:32px;background:var(--surface);color:var(--ink);border-bottom-color:var(--line)}
 .smap .leaflet-bar a:hover{background:var(--surface-2);color:var(--ink)}
@@ -546,8 +546,8 @@ textarea.input{width:100%;min-height:120px;resize:vertical;line-height:1.5}
   .table-wrap table:has(td.cb) td.row-actions:empty{display:none}
 }
 /* ---------- phone app additions: sign-in, splash, status bar, offline note ---------- */
-/* Outside Claude the page runs edge to edge under the iPhone's status bar, so the page keeps clear of it
-   the same way Claude's frame did, and a strip of the background colour sits behind the clock. */
+/* If the page ever runs edge to edge under the iPhone's status bar, it keeps clear of it the same way
+   Claude's frame did, and a strip of the background colour sits behind the clock. */
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .statusbar-veil{position:fixed;top:0;left:0;right:0;z-index:31;height:env(safe-area-inset-top,0px);background:var(--bg);pointer-events:none}
 body:not(.signed-in) .app,body:not(.signed-in) .statusbar-veil{display:none}
