@@ -241,6 +241,10 @@ const OSM_REFERRER = 'strict-origin-when-cross-origin';
 const CHAIN_NAMES = /^(the )?(pandora|goldsmiths|h\.? ?samuel|ernest jones|beaverbrooks|warren james|swarovski|mappin (&|and) webb|fraser hart|f\.? ?hinds|michael hill|tiffany|cartier|bulgari|bvlgari|chopard|van cleef|boodles|links of london|thomas sabo|clogau|fields|argento|claire'?s|lovisa|accessorize|astrid (&|and) miyu|monica vinader|missoma|abbott lyon|daisy london|laings|berry'?s|hugh rice|pragnell|david m\.? robinson|watches of switzerland|rolex|omega|tag heuer|chamilia|diamond store|77 diamonds|taylor (&|and) hart|steffans|john greed|t\.? ?h\.? baker)\b/i;
 const SHARED_HOSTS = /(^|\.)(facebook\.com|instagram\.com|linktr\.ee|google\.com|wixsite\.com|business\.site|square\.site|etsy\.com|ebay\.co\.uk|ebay\.com|amazon\.co\.uk|yell\.com|tiktok\.com|x\.com|twitter\.com)$/;
 const SHOWN_STEP = 40;
+// Claude's background look-ups: how often its scheduled check runs, and how many shops it does each time
+const RESEARCH_EVERY_H = 3;
+const RESEARCH_BATCH = 15;
+const RESEARCH_KEYS = ['website', 'email', 'phone', 'instagram', 'facebook', 'person'];
 const VISIT_OUTCOMES = [['interested', 'Interested'], ['samples', 'Wants samples'], ['not_now', 'Not now'], ['no', 'Not interested']];
 const VISIT_LABEL = Object.fromEntries(VISIT_OUTCOMES);
 const VISIT_TEMPLATE = { subject: 'Visiting {{city}} on {{visit_date}}', body: "Hello {{contact}},\n\nI'm {{sender}} from {{company}}. We make jewellery set with lab-grown diamonds in India: {{products}}.\n\nI'll be in {{city}} on {{visit_date}}. Could I stop by {{business}} for 15 minutes around {{visit_time}} to show you a few pieces? If another time suits you better, just reply with it.\n\nBest regards,\n{{sender}}\n{{company}}" };
@@ -365,6 +369,8 @@ const S = {
   trips: new Map(),
   inbox: new Map(),
   places: new Map(),
+  research: new Map(),
+  researchBusy: false,
   settingsDoc: null,
   suppressDoc: null,
   route: { view: 'today', id: null },
@@ -460,7 +466,7 @@ async function setFocus(next) {
 }
 
 /* ================= data layer ================= */
-function mapFor(coll) { return { campaigns: S.campaigns, businesses: S.businesses, quotes: S.quotes, samples: S.samples, broadcasts: S.broadcasts, posts: S.posts, orders: S.orders, prices: S.prices, trips: S.trips, inbox: S.inbox, places: S.places }[coll] || null; }
+function mapFor(coll) { return { campaigns: S.campaigns, businesses: S.businesses, quotes: S.quotes, samples: S.samples, broadcasts: S.broadcasts, posts: S.posts, orders: S.orders, prices: S.prices, trips: S.trips, inbox: S.inbox, places: S.places, research: S.research }[coll] || null; }
 function deepMerge(base, patch) {
   const out = { ...(base || {}) };
   for (const [k, v] of Object.entries(patch || {})) {
@@ -1636,6 +1642,20 @@ function dedupeShops(list) {
   for (const s of list.slice().sort((a, b) => Object.keys(b).length - Object.keys(a).length)) if (!out.some((x) => nameKey(x.name) === nameKey(s.name) && metres(x, s) < 80)) out.push(s);
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
+// Claude's findings for one shop take the place of the map's own details where it found something
+function mergeShop(s, r) {
+  if (!r) return s;
+  const m = { ...s, checked: 1 };
+  for (const k of RESEARCH_KEYS) { const v = String(r[k] || '').trim(); if (v) m[k] = k === 'email' ? v.toLowerCase() : v.slice(0, 200); }
+  if (r.legalForm && LEGAL_LABEL[r.legalForm]) m.legalForm = r.legalForm;
+  if (r.companyNo) m.companyNo = String(r.companyNo).trim().slice(0, 20);
+  if (r.labGrown === true) m.labGrown = 1;
+  if (r.closed) m.closed = 1;
+  if (r.note) m.note = String(r.note).trim().slice(0, 200);
+  return m;
+}
+const researchOf = (key) => S.research.get(key) || null;
+const shopsOf = (doc) => { const res = (researchOf(placeKey(doc.country, doc.city)) || {}).results || {}; return (doc.shops || []).map((s) => mergeShop(s, res[s.id])); };
 function buyerIndex(country, city) {
   const idx = { osm: new Map(), name: new Map(), site: new Map(), phone: new Map() };
   for (const b of allBiz()) {
@@ -1650,7 +1670,7 @@ function buyerIndex(country, city) {
 const buyerFor = (s, idx) => idx.osm.get(s.id) || idx.name.get(nameKey(s.name)) || (siteKey(s.website) && idx.site.get(siteKey(s.website))) || (phoneKey(s.phone) && idx.phone.get(phoneKey(s.phone))) || null;
 const brandOf = (s) => s.brand || ((s.name.match(CHAIN_NAMES) || [])[0] || s.name).replace(/^the /i, '').trim();
 function showroomReport(doc) {
-  const shops = doc.shops || []; const idx = buyerIndex(doc.country, doc.city);
+  const shops = shopsOf(doc); const idx = buyerIndex(doc.country, doc.city);
   const rows = shops.map((s) => ({ s, b: buyerFor(s, idx) }));
   const tally = (list, keyOf) => { const m = new Map(); for (const x of list) { const k = keyOf(x); if (!k) continue; const e = m.get(k) || { label: k, n: 0, names: new Map() }; e.n++; m.set(k, e); if (x.s.area) e.names.set(x.s.area, (e.names.get(x.s.area) || 0) + 1); } return [...m.values()].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'en', { numeric: true })); };
   const areas = tally(rows, (x) => ukDistrict(x.s.postcode) || x.s.area || x.s.town || '').map((e) => { const top = [...e.names.entries()].sort((a, b) => b[1] - a[1])[0]; return { ...e, label: top && top[0] !== e.label ? `${e.label}, ${top[0]}` : e.label }; });
@@ -1660,12 +1680,13 @@ function showroomReport(doc) {
 
 async function osmFetch(url, opts = {}, ms = 30000) {
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), ms);
+  const stop = S.find.ctl; const onStop = () => ctl.abort(); if (stop) stop.signal.addEventListener('abort', onStop);
   try {
     const res = await fetch(url, { ...opts, signal: ctl.signal, referrerPolicy: OSM_REFERRER, credentials: 'omit', cache: 'no-store' });
     if (!res.ok) throw { code: res.status === 429 || res.status === 504 ? 'busy' : 'unavailable', status: res.status };
     return await res.json();
-  } catch (e) { if (e && e.code) throw e; throw { code: navigator.onLine === false ? 'offline' : 'unavailable' }; }
-  finally { clearTimeout(timer); }
+  } catch (e) { if (stop && stop.signal.aborted) throw { code: 'stopped' }; if (e && e.code) throw e; throw { code: navigator.onLine === false ? 'offline' : 'unavailable' }; }
+  finally { clearTimeout(timer); if (stop) stop.signal.removeEventListener('abort', onStop); }
 }
 async function locateCity(city, country) {
   const ask = (params) => osmFetch(`${GEOCODER}?${new URLSearchParams({ ...params, format: 'jsonv2', limit: '5', 'accept-language': 'en' })}`);
@@ -1690,7 +1711,7 @@ async function overpass(query) {
       const data = await osmFetch(url, { method: 'POST', body: new URLSearchParams({ data: query }) }, 100000);
       if (data && Array.isArray(data.elements) && (data.elements.length || !/error/i.test(String(data.remark || '')))) return data;
       last = { code: 'busy' };
-    } catch (e) { last = e; }
+    } catch (e) { if (e && e.code === 'stopped') throw e; last = e; }
   }
   throw last || { code: 'unavailable' };
 }
@@ -1716,21 +1737,22 @@ async function findShowrooms(country, city, force) {
   const key = placeKey(country, city);
   if (!canFind() || S.find.busy || (!force && S.places.get(key))) return false;
   S.findTried.add(key);
-  S.find = { key, busy: true, step: `Finding ${city} on the map`, error: '' }; schedule();
+  const ctl = new AbortController(); const halt = () => { if (ctl.signal.aborted) throw { code: 'stopped' }; };
+  S.find = { key, busy: true, step: `Finding ${city} on the map`, error: '', ctl }; schedule();
   let ok = false;
   try {
-    const area = await locateCity(city, country);
+    const area = await locateCity(city, country); halt();
     S.find.step = `Collecting the jewellery showrooms in ${city}`; schedule();
-    let data = await overpass(showroomQuery(area));
-    if (!data.elements.length && area.osmId && area.bbox) data = await overpass(showroomQuery({ ...area, osmType: 'box' }));
+    let data = await overpass(showroomQuery(area)); halt();
+    if (!data.elements.length && area.osmId && area.bbox) { data = await overpass(showroomQuery({ ...area, osmType: 'box' })); halt(); }
     const shops = dedupeShops(data.elements.map(shopFrom).filter(Boolean)).slice(0, 2500);
-    if (placeText(country) === placeText(UK) && shops.some((s) => !s.postcode)) { S.find.step = 'Adding postcodes'; schedule(); await fillPostcodes(shops); }
+    if (placeText(country) === placeText(UK) && shops.some((s) => !s.postcode)) { S.find.step = 'Adding postcodes'; schedule(); await fillPostcodes(shops); halt(); }
     const doc = { city, country, fetchedAt: nowIso(), source: 'OpenStreetMap', area: { osmType: area.osmType, osmId: area.osmId, lat: area.lat, lon: area.lon, bbox: area.bbox }, shops };
     S.find = { key: '', busy: false, step: '', error: '' };
     ok = await write(() => Data.set('places', key, doc));
     if (ok) { Object.assign(S.ui, { placeSel: '', placePan: '', placesShown: SHOWN_STEP }); toast(shops.length ? `${shops.length} showrooms found in ${city}` : `No showrooms on the map in ${city}`); }
   } catch (e) {
-    S.find = { key, busy: false, step: '', error: findError(e, city) };
+    S.find = e && e.code === 'stopped' ? { key, busy: false, step: '', error: '', stopped: true } : { key, busy: false, step: '', error: findError(e, city) };
   }
   schedule();
   return ok;
@@ -1754,18 +1776,74 @@ function shopWhere(s, doc) {
 async function addShops(key, ids) {
   const doc = S.places.get(key); if (!doc) return 0;
   const idx = buyerIndex(doc.country, doc.city); const want = new Set(ids);
-  const list = (doc.shops || []).filter((s) => want.has(s.id) && !buyerFor(s, idx));
+  const list = shopsOf(doc).filter((s) => want.has(s.id) && !buyerFor(s, idx));
   if (!list.length) return 0;
   const cid = await cityCampaign(doc.city, doc.country); if (!cid) return 0;
   let n = 0;
   for (const s of list) {
     if (s.email && isSuppressed(s.email)) continue;
-    const b = newBiz({ campaignId: cid, name: s.name, type: s.chain ? 'chain' : 'independent', city: doc.city, country: doc.country, source: 'map',
-      notes: `Where: ${shopWhere(s, doc)}\nFound on the showroom map (OpenStreetMap).`, contact: { email: s.email || '', phone: s.phone || '', website: s.website || '', instagram: s.instagram || '', facebook: s.facebook || '' } });
-    if (!(await write(() => Data.set('businesses', Data.newId('businesses'), { ...b, osm: s.id })))) break;
+    const b = newBiz({ campaignId: cid, name: s.name, type: s.chain ? 'chain' : 'independent', city: doc.city, country: doc.country, source: 'map', labGrown: !!s.labGrown, legalForm: s.legalForm || '', companyNo: s.companyNo || '',
+      notes: `Where: ${shopWhere(s, doc)}\nFound on the showroom map (OpenStreetMap).${s.note ? `\n${s.note}` : ''}`, contact: { person: s.person || '', email: s.email || '', phone: s.phone || '', website: s.website || '', instagram: s.instagram || '', facebook: s.facebook || '' } });
+    if (!(await write(() => Data.set('businesses', Data.newId('businesses'), { ...b, osm: s.id, ...(s.checked ? { researchAt: nowIso() } : {}) })))) break;
     n++;
   }
   return n;
+}
+// New findings fill the empty details of shops already on your list; nothing you typed is overwritten.
+let researchTimer = 0;
+function queueResearch() { if (!researchTimer) researchTimer = setTimeout(() => { researchTimer = 0; applyResearch(); }, 500); }
+async function applyResearch() {
+  if (S.mode !== 'db' || S.researchBusy || !(S.loaded.businesses && S.loaded.places)) return;
+  S.researchBusy = true;
+  try {
+    for (const [key, rs] of S.research) {
+      const doc = S.places.get(key); const res = (rs && rs.results) || {}; if (!doc || !Object.keys(res).length) continue;
+      const idx = buyerIndex(doc.country, doc.city);
+      for (const s of shopsOf(doc)) {
+        const r = res[s.id]; if (!r) continue;
+        const at = String(r.checkedAt || rs.updatedAt || ''); const b = buyerFor(s, idx);
+        if (!b || (b.researchAt && at && b.researchAt >= at)) continue;
+        const c = contactOf(b); const contact = {};
+        for (const k of RESEARCH_KEYS) if (s[k] && !String(c[k] || '').trim() && !(k === 'email' && isSuppressed(s[k]))) contact[k] = s[k];
+        const patch = { researchAt: at || nowIso() };
+        if (Object.keys(contact).length) patch.contact = contact;
+        if (s.legalForm && !b.legalForm) patch.legalForm = s.legalForm;
+        if (s.companyNo && !b.companyNo) patch.companyNo = s.companyNo;
+        if (s.labGrown && !b.labGrown) patch.labGrown = true;
+        if (!(await write(() => updateBiz(b.id, patch)))) return;
+      }
+    }
+  } finally { S.researchBusy = false; }
+}
+const researchSeen = new Set();
+function markResearchSeen(key) {
+  const rs = researchOf(key);
+  if (!rs || rs.status !== 'done' || !rs.finishedAt || (rs.seenAt && rs.seenAt >= rs.finishedAt) || researchSeen.has(key)) return;
+  researchSeen.add(key); setTimeout(() => write(() => Data.update('research', key, { seenAt: nowIso() })), 0);
+}
+function researchPanel(key, r) {
+  const rs = researchOf(key); const total = r.ind.length; if (!total) return '';
+  const done = r.ind.filter((x) => x.s.checked).length; const st = rs ? rs.status : '';
+  const head = '<h3>Emails and details</h3>'; const k = esc(key);
+  const bar = `<div class="progress" role="progressbar" aria-label="Showrooms checked" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${(done / total * 100).toFixed(1)}%"></i></div>`;
+  if (!st) {
+    if (!canFind()) return '';
+    return `<section class="panel research">${head}<p class="muted" style="margin:0">Claude can look up every independent showroom here: its website, email, Instagram, the owner's name and, in the UK, whether it's a limited company. It works in the background, ${RESEARCH_BATCH} shops every ${RESEARCH_EVERY_H} hours, so you can close the app. What it finds shows here and goes onto the shops you add.</p><div class="actions"><button type="button" class="btn" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
+  }
+  if (st === 'done') {
+    const n = (f) => r.ind.filter((x) => x.s.checked && f(x.s)).length; const em = n((s) => s.email), web = n((s) => s.website), lf = n((s) => s.legalForm);
+    return `<section class="panel research">${head}<p style="margin:0">Claude checked all ${total} independent showrooms${rs.finishedAt ? `, finishing ${esc(fmtWhen(rs.finishedAt))}` : ''}: ${em} with an email, ${web} with a website${lf ? `, ${lf} with their company type` : ''}.</p><div class="actions">${moreMenu('research', `<button type="button" class="btn small" data-act="research-again" data-key="${k}">${ico('refresh')}Check them all again</button>`)}</div></section>`;
+  }
+  if (st === 'stopped') return `<section class="panel research">${head}<p style="margin:0">Stopped at ${done} of ${total} showrooms. What Claude found so far stays.</p>${bar}<div class="actions"><button type="button" class="btn" data-act="research-continue" data-key="${k}">${ico('refresh')}Continue</button></div></section>`;
+  return `<section class="panel research">${head}<p style="margin:0">${done ? `Claude has checked ${done} of ${total} showrooms.` : `Waiting for Claude to start. It checks every ${RESEARCH_EVERY_H} hours.`}</p>${bar}
+    <p class="hint" style="margin:0">${rs.updatedAt && done ? `Last update ${esc(fmtWhen(rs.updatedAt))}. ` : ''}You can close the app; the details keep coming, and Today tells you when they're all done.</p>
+    <div class="actions"><button type="button" class="btn small" data-act="research-stop" data-key="${k}">${ico('stop')}Stop</button></div></section>`;
+}
+function researchBanner() {
+  return [...S.research.entries()].filter(([, rs]) => rs.status === 'done' && rs.finishedAt && !(rs.seenAt && rs.seenAt >= rs.finishedAt)).map(([key, rs]) => {
+    const d = S.places.get(key); const n = d ? showroomReport(d).ind.filter((x) => x.s.checked).length : 0;
+    return `<div class="banner">${ico('spark')}<p><b>Claude found the details for the showrooms in ${esc(rs.city)}.</b> ${n ? `${n} checked. ` : ''}<button type="button" class="linkish" data-act="work-on" data-country="${esc(rs.country)}" data-city="${esc(rs.city)}">See them</button></p></div>`;
+  }).join('');
 }
 const shopMapsUrl = (s, doc) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${s.name}, ${shopWhere(s, doc)}`)}`;
 const reportFileName = (doc) => `showrooms-${placeText(doc.city) || 'city'}-${String(doc.fetchedAt || todayStr()).slice(0, 10)}.pdf`;
@@ -1864,7 +1942,7 @@ function drawMap(L, key) {
     MAPV.layer = L.layerGroup().addTo(MAPV.map);
   }
   MAPV.map.invalidateSize(false);
-  const idx = buyerIndex(doc.country, doc.city); const shops = doc.shops || [];
+  const idx = buyerIndex(doc.country, doc.city); const shops = shopsOf(doc);
   const mine = shops.filter((s) => buyerFor(s, idx)).map((s) => s.id);
   const sig = [key, doc.fetchedAt, S.ui.placeSel, mine.join(',')].join('|');
   if (sig !== MAPV.sig) {
@@ -2164,7 +2242,7 @@ function renderNav() {
   setShell('tabbar', TAB_VIEWS.map((k) => link(byKey[k])).join('') + `<button type="button" id="tab-more" data-act="more" aria-haspopup="dialog" aria-controls="more" ${MORE_VIEWS.includes(cur) ? 'aria-current="page"' : ''}>${MORE_ICON}<span>More</span></button>`);
   const more = $('#tab-more'); if (more) more.setAttribute('aria-expanded', String(moreOpen()));
   setShell('more-nav', MORE_VIEWS.map((k) => link(byKey[k])).join(''));
-  const total = S.campaigns.size + S.businesses.size + S.quotes.size + S.samples.size + S.broadcasts.size + S.posts.size + S.orders.size + S.prices.size + S.trips.size + S.places.size;
+  const total = S.campaigns.size + S.businesses.size + S.quotes.size + S.samples.size + S.broadcasts.size + S.posts.size + S.orders.size + S.prices.size + S.trips.size + S.places.size + S.research.size;
   const modeNote = S.mode === 'db' ? `<b>${total.toLocaleString('en-US')}</b> of ${CAP.toLocaleString('en-US')} records used.` : S.mode === 'local' ? "<b>Practice mode.</b> Changes here aren't saved." : '';
   const foot = `${modeNote}<br>Channels connect at the end.`;
   setShell('side-foot', foot); setShell('more-foot', foot);
@@ -2250,6 +2328,7 @@ function todayView() {
   <header class="head"><div><div class="eyebrow">${esc(dateLabel)} · ${esc(focusName())}</div><h1>Today</h1><p>Answer replies first, then do your tasks and send the emails that are due.</p></div>
     <div class="actions"><button class="btn" data-act="log-reply">${ico('chat')}Log a reply</button></div></header>
   ${outsideBanner()}
+  ${researchBanner()}
   ${t.emails.length || t.tasks.length ? notConnectedBanner() : ''}
   ${pitchNames.length ? `<div class="banner plain">${ico('calendar')}<p><b>Retailers are ordering now for ${esc(listAnd(pitchNames))}.</b> Send your leads a seasonal offer before the window closes. <a href="#calendar">Open the calendar</a></p></div>` : ''}
   <div class="tiles">
@@ -2506,20 +2585,23 @@ function showroomsView() {
   if (!doc) {
     if (!canFind()) return head(`<p>Finding showrooms works in the Ark Diamond app on your phone, at <a href="${MOVED_TO}" target="_blank" rel="noopener">yumitdungrani.github.io</a>.</p>`);
     if (!busy && S.find.error && S.find.key === key) return head(`<p>${esc(S.find.error)}</p>`, `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Try again</button><button class="btn" data-act="focus-open">Another city</button></div>`);
+    if (!busy && S.find.stopped && S.find.key === key) return head('<p>Search stopped. Nothing was saved.</p>', `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Search again</button><button class="btn" data-act="focus-open">Another city</button></div>`);
     autoFind(f);
-    return head('<p>Every jewellery showroom in the city, on a map, with a short report.</p>') + `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(busy ? S.find.step : `Looking for showrooms in ${f.city}`)}…</b><br><span class="sub">This takes a few seconds, longer for London.</span></p></div>`;
+    return head('<p>Every jewellery showroom in the city, on a map, with a short report.</p>') + `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(busy ? S.find.step : `Looking for showrooms in ${f.city}`)}…</b><br><span class="sub">This takes a few seconds, longer for London.</span></p>${busy ? `<button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button>` : ''}</div>`;
   }
   const r = showroomReport(doc); const pf = S.filters.places; const q = pf.q.trim().toLowerCase();
   const tab = ['ind', 'chain', 'mine'].includes(pf.tab) ? pf.tab : 'ind';
   let list = tab === 'chain' ? r.chains : tab === 'mine' ? r.mine : r.ind;
   if (q) list = list.filter((x) => [x.s.name, x.s.street, x.s.postcode, x.s.area, x.s.brand].join(' ').toLowerCase().includes(q));
-  const shown = list.slice(0, S.ui.placesShown); const toAdd = r.ind.filter((x) => !x.b);
+  const shown = list.slice(0, S.ui.placesShown); const toAdd = r.ind.filter((x) => !x.b && !x.s.closed); markResearchSeen(key);
   const sel = S.ui.placeSel ? r.rows.find((x) => x.s.id === S.ui.placeSel) : null;
   const areas = r.areas.slice(0, 8); const amax = Math.max(1, ...areas.map((a) => a.n));
   const fetched = String(doc.fetchedAt || '').slice(0, 10);
   return head(`<p>${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}.</p>`,
     `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button>${moreMenu('places', `<button class="btn small" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Searching…' : 'Search again'}</button><button class="btn small" data-act="focus-open">${ico('pin')}Another city</button>`)}</div>`) + `
   <div class="tiles">${tile(r.total, 'Showrooms')}${tile(r.ind.length, 'Independent')}${tile(r.chains.length, 'Chains')}${tile(r.mine.length, 'Your buyers')}</div>
+  ${busy ? `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(S.find.step)}…</b></p><button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button></div>` : ''}
+  ${researchPanel(key, r)}
   ${r.total ? `<section class="section map-section"><div class="mapbox" id="map-slot" data-key="${esc(key)}"></div>
     <div class="legend" aria-hidden="true"><span><i class="ind"></i>Independent</span><span><i class="chain"></i>Chain</span><span><i class="mine"></i>Your buyer</span></div>
     ${sel ? `<div class="list picked">${shopItem(sel, doc, key, true)}</div>` : '<p class="hint">Tap a dot to see the shop.</p>'}</section>` : emptyBox(`OpenStreetMap has no jewellery showrooms in ${esc(doc.city)}. Try a nearby larger town, or ask Claude to search the high street.`, `<button class="btn" data-act="focus-open">Another city</button>`)}
@@ -2536,10 +2618,12 @@ function showroomsView() {
 function shopItem(x, doc, key, picked) {
   const { s, b } = x; const site = safeUrl(s.website); const tel = String(s.phone || '').replace(/[^\d+]/g, '');
   const where = [s.street, s.postcode ? `${s.postcode}${s.near ? ' (nearby)' : ''}` : ''].filter(Boolean).join(', ') || s.area || s.town || '';
-  const extra = `${picked ? '' : `<button type="button" class="btn small" data-act="places-show" data-id="${esc(s.id)}">${ico('pin')}Show on map</button>`}<a class="btn small" href="${esc(shopMapsUrl(s, doc))}" target="_blank" rel="noopener">${ico('route')}Directions</a>${tel ? `<a class="btn small" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}${site ? `<a class="btn small" href="${esc(site)}" target="_blank" rel="noopener">${ico('ext')}Website</a>` : ''}${picked ? `<button type="button" class="btn small quiet" data-act="places-unsel">Close</button>` : ''}`;
+  const extra = `${picked ? '' : `<button type="button" class="btn small" data-act="places-show" data-id="${esc(s.id)}">${ico('pin')}Show on map</button>`}<a class="btn small" href="${esc(shopMapsUrl(s, doc))}" target="_blank" rel="noopener">${ico('route')}Directions</a>${tel ? `<a class="btn small" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}${site ? `<a class="btn small" href="${esc(site)}" target="_blank" rel="noopener">${ico('ext')}Website</a>` : ''}${igUrl(s.instagram) ? `<a class="btn small" href="${esc(igUrl(s.instagram))}" target="_blank" rel="noopener">${ico('camera')}Instagram</a>` : ''}${picked ? `<button type="button" class="btn small quiet" data-act="places-unsel">Close</button>` : ''}`;
   return `<div class="item"><div class="stack">
-    <div class="title-row">${b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(s.name)}</button>` : `<b>${esc(s.name)}</b>`}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${b ? (b.lead ? stageChip(b.lead.stage) : statusChip(b)) : ''}</div>
+    <div class="title-row">${b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(s.name)}</button>` : `<b>${esc(s.name)}</b>`}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${s.closed ? '<span class="chip warn">May have closed</span>' : ''}${b ? (b.lead ? stageChip(b.lead.stage) : statusChip(b)) : ''}</div>
     <div class="meta">${where ? `<span>${esc(where)}</span>` : ''}${s.phone ? `<span class="mono">${esc(s.phone)}</span>` : ''}${site ? `<span>${esc(cleanDomain(site))}</span>` : ''}${s.email ? `<span class="mono sel">${esc(s.email)}</span>` : ''}</div>
+    ${s.person || s.legalForm || s.labGrown ? `<div class="meta">${s.person ? `<span>${esc(s.person)}</span>` : ''}${s.legalForm ? `<span>${esc(LEGAL_LABEL[s.legalForm] || s.legalForm)}${s.companyNo ? `, no. ${esc(s.companyNo)}` : ''}</span>` : ''}${s.labGrown ? '<span class="labmark">sells lab-grown</span>' : ''}</div>` : ''}
+    ${s.note ? `<div class="sub">${esc(s.note)}</div>` : ''}
   </div><div class="actions">${b ? `<button class="btn small" data-act="open-biz" data-id="${esc(b.id)}">Open</button>` : `<button class="btn small primary" data-act="places-add" data-key="${esc(key)}" data-id="${esc(s.id)}">${ico('plus')}Add</button>`}${moreMenu('shop:' + s.id + (picked ? ':p' : ''), extra)}</div></div>`;
 }
 function focusModal() {
@@ -3805,6 +3889,15 @@ async function onClick(e) {
       }
       break;
     }
+    case 'find-stop': if (S.find.ctl) S.find.ctl.abort(); break;
+    case 'research-start': case 'research-again': {
+      const k = el.dataset.key; const d = S.places.get(k); if (!d) break; const cur = researchOf(k); const now = nowIso();
+      const doc = { city: d.city, country: d.country, status: 'queued', requestedAt: now, updatedAt: now, results: act === 'research-again' || !cur ? {} : cur.results || {} };
+      if (await write(() => Data.set('research', k, doc))) toast(`Claude will start on ${d.city} within ${RESEARCH_EVERY_H} hours`);
+      break;
+    }
+    case 'research-stop': if (await write(() => Data.update('research', el.dataset.key, { status: 'stopped', updatedAt: nowIso() }))) toast('Stopped. What Claude found so far stays.'); break;
+    case 'research-continue': if (await write(() => Data.update('research', el.dataset.key, { status: 'queued', updatedAt: nowIso() }))) toast(`Claude will carry on within ${RESEARCH_EVERY_H} hours`); break;
     case 'places-retry': { const f = focusNow(); if (f.city) findShowrooms(f.country, f.city, true); break; }
     case 'places-refresh': { const d = S.places.get(el.dataset.key); if (d) findShowrooms(d.country, d.city, true); break; }
     case 'places-add': {
@@ -3814,7 +3907,7 @@ async function onClick(e) {
     }
     case 'places-add-all': {
       const d = S.places.get(el.dataset.key); if (!d) break;
-      const ids = showroomReport(d).ind.filter((x) => !x.b).map((x) => x.s.id); el.disabled = true;
+      const ids = showroomReport(d).ind.filter((x) => !x.b && !x.s.closed).map((x) => x.s.id); el.disabled = true;
       const n = await addShops(el.dataset.key, ids);
       toast(n ? `${n} showrooms added to your ${d.city} buyers, ready to review` : 'They are all on your list already'); render();
       break;
@@ -4483,8 +4576,8 @@ function route() {
 }
 function subscribe() {
   const onErr = (e) => { if (e && e.code === 'revoked') S.mode = 'revoked'; toast(errorText(e)); schedule(); };
-  const watch = (coll) => DB.collection(coll).onSnapshot((snap) => { S[coll] = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); if (coll in S.loaded) S.loaded[coll] = true; schedule(); }, onErr);
-  for (const coll of ['campaigns', 'businesses', 'quotes', 'samples', 'broadcasts', 'posts', 'orders', 'prices', 'trips', 'places']) watch(coll);
+  const watch = (coll) => DB.collection(coll).onSnapshot((snap) => { S[coll] = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); if (coll in S.loaded) S.loaded[coll] = true; if (['research', 'places', 'businesses'].includes(coll)) queueResearch(); schedule(); }, onErr);
+  for (const coll of ['campaigns', 'businesses', 'quotes', 'samples', 'broadcasts', 'posts', 'orders', 'prices', 'trips', 'places', 'research']) watch(coll);
   DB.doc('config/settings').onSnapshot((snap) => { S.settingsDoc = snap.exists ? snap.data() : null; S.loaded.settings = true; schedule(); }, onErr);
   DB.doc('config/suppression').onSnapshot((snap) => { S.suppressDoc = snap.exists ? snap.data() : null; schedule(); }, onErr);
   if (S.device) {
@@ -4521,6 +4614,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { S, Data, focusNow, setFocus, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
+window.__facet = { S, Data, focusNow, setFocus, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
 init();
 })();

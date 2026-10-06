@@ -385,7 +385,7 @@ textarea.input{width:100%;min-height:120px;resize:vertical;line-height:1.5}
 .cities.small .city-btn b{font-size:17px}
 .inline-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px}
 .inline-form .field{flex:1 1 200px}
-.mapbox{position:relative;height:400px;overflow:hidden;border:1px solid var(--line-gold);border-radius:12px;background:#0E152E}
+.mapbox{position:relative;isolation:isolate;height:400px;overflow:hidden;border:1px solid var(--line-gold);border-radius:12px;background:#0E152E}
 .mapbox.off{display:grid;place-items:center;height:auto;min-height:72px;padding:16px;background:var(--surface)}
 .smap{position:absolute;inset:0}
 .smap.leaflet-container{background:#0E152E;font:13px/1.4 var(--font-body)}
@@ -405,6 +405,10 @@ textarea.input{width:100%;min-height:120px;resize:vertical;line-height:1.5}
 .bulk span{flex:1 1 220px}
 .finding{display:flex;align-items:center;gap:16px;padding:18px 20px;border:1px solid var(--line-gold);border-radius:12px;background:var(--surface)}
 .finding p{margin:0}
+.finding>.btn{margin-left:auto}
+.panel.research{border-color:var(--line-gold)}
+.progress{height:8px;overflow:hidden;border-radius:4px;background:var(--surface-2)}
+.progress i{display:block;height:100%;border-radius:4px;background:var(--gold)}
 .gemspin{width:32px;height:32px;flex:none;fill:none;stroke:var(--gold);stroke-width:1.2;stroke-linejoin:round}
 @media (prefers-reduced-motion:no-preference){.gemspin{animation:glint 1.5s ease-in-out infinite}}
 @keyframes glint{0%,100%{opacity:.4;transform:scale(.9)}50%{opacity:1;transform:scale(1)}}
