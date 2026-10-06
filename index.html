@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ark Diamond</title>
 <meta name="description" content="Ark Diamond: UK buyers, follow-ups, proforma invoices and shop visits.">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://uhfpoduakpsagoecszpt.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://uhfpoduakpsagoecszpt.supabase.co https://nominatim.openstreetmap.org https://overpass-api.de https://overpass.kumi.systems https://api.postcodes.io; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0B1124">
@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400..700&family=Jost:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="app.css?v=17ff1a7624">
+<link rel="stylesheet" href="app.css?v=8f7f157d1f">
 </head>
 <body>
 <div class="statusbar-veil" aria-hidden="true"></div>
@@ -78,12 +78,14 @@
       <svg class="gem" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg>
       <b>Ark Diamond</b>
     </a>
+    <div class="focus-top" id="focus-top"></div>
   </header>
   <aside class="side">
     <a class="brand" href="#today" aria-label="Ark Diamond Outreach, today">
       <svg class="gem" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg>
       <span><b>Ark Diamond</b><small>Outreach</small></span>
     </a>
+    <div class="focus-side" id="focus-side"></div>
     <nav class="nav" id="nav" aria-label="Main"></nav>
     <div class="side-foot" id="side-foot"></div>
   </aside>
@@ -102,7 +104,7 @@
 </div>
 <div id="layer"></div>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-<script src="config.js?v=17ff1a7624"></script>
-<script src="bridge.js?v=17ff1a7624"></script>
+<script src="config.js?v=8f7f157d1f"></script>
+<script src="bridge.js?v=8f7f157d1f"></script>
 </body>
 </html>

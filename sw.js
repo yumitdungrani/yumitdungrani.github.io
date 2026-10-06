@@ -1,7 +1,7 @@
 /* Ark Diamond app: lets it open from the home screen with a weak signal.
    The app's own files: fresh from the network first, the saved copy when offline.
    Fonts and the QR library are kept once fetched. Records from the database are never stored here. */
-const CACHE = 'ark-diamond-17ff1a7624';
+const CACHE = 'ark-diamond-8f7f157d1f';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'bridge.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 const KEEP = /^https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com|cdnjs\.cloudflare\.com)\//;
 
