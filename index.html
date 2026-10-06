@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ark Diamond</title>
+<meta name="description" content="Ark Diamond: UK buyers, follow-ups, proforma invoices and shop visits.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://uhfpoduakpsagoecszpt.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0B1124">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ark Diamond">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400..700&family=Jost:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="app.css?v=cf50d521a2">
+</head>
+<body>
+<div class="statusbar-veil" aria-hidden="true"></div>
+
+<div class="splash" id="splash">
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg>
+  <p class="word">Ark Diamond</p>
+</div>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg>
+      <p class="word">Ark Diamond</p>
+      <p class="tag">Buyers, follow-ups, invoices and visits</p>
+    </div>
+
+    <form id="gate-login" class="gate-form" hidden novalidate>
+      <h1>Sign in</h1>
+      <div class="field"><label for="gl-email">Email</label><input class="input" id="gl-email" name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required></div>
+      <div class="field"><label for="gl-pass">Password</label><input class="input" id="gl-pass" name="password" type="password" autocomplete="current-password" required></div>
+      <p class="gate-error" role="alert" hidden></p>
+      <button class="btn primary" type="submit">Sign in</button>
+      <p class="gate-hint">Forgot your password? Ask Claude for a reset code, then <button type="button" class="linkish" id="to-reset">set a new password</button>.</p>
+    </form>
+
+    <form id="gate-setup" class="gate-form" hidden novalidate data-mode="setup">
+      <h1>Set up your login</h1>
+      <p class="gate-intro">Enter the setup code Claude gave you, then choose the email and password you will sign in with.</p>
+      <div class="field"><label for="gs-code">Code from Claude</label><input class="input mono" id="gs-code" name="code" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ARK-XXXX-XXXX-XXXX" required></div>
+      <div class="field"><label for="gs-email">Email</label><input class="input" id="gs-email" name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required></div>
+      <div class="field"><label for="gs-pass">Password</label><input class="input" id="gs-pass" name="password" type="password" autocomplete="new-password" minlength="10" required aria-describedby="gs-pass-hint"></div>
+      <p class="gate-hint" id="gs-pass-hint">At least 10 characters. Your iPhone can suggest a strong one and remember it.</p>
+      <div class="field"><label for="gs-pass2">Password again</label><input class="input" id="gs-pass2" name="password2" type="password" autocomplete="new-password" minlength="10" required></div>
+      <p class="gate-error" role="alert" hidden></p>
+      <button class="btn primary" type="submit">Create login</button>
+      <p class="gate-hint"><button type="button" class="linkish" id="to-login">Back to sign in</button></p>
+    </form>
+
+    <div id="gate-offline" class="gate-form" hidden>
+      <h1>No connection</h1>
+      <p class="gate-intro">The app couldn't reach its database. Check your internet connection and try again.</p>
+      <p class="gate-error" role="alert" hidden></p>
+      <button class="btn primary" type="button" id="gate-retry">Try again</button>
+    </div>
+  </div>
+</div>
+
+<p class="offline-note" id="offline-note" role="status" hidden>Offline. You're seeing the copy saved on this phone. Changes can't be saved until you're back online.</p>
+
+<div class="app">
+  <header class="topbar">
+    <a class="brand" href="#today" aria-label="Ark Diamond Outreach, today">
+      <svg class="gem" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg>
+      <b>Ark Diamond</b>
+    </a>
+  </header>
+  <aside class="side">
+    <a class="brand" href="#today" aria-label="Ark Diamond Outreach, today">
+      <svg class="gem" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg>
+      <span><b>Ark Diamond</b><small>Outreach</small></span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Main"></nav>
+    <div class="side-foot" id="side-foot"></div>
+  </aside>
+  <main class="main" id="main">
+    <div class="wrap"><div class="loading"><h1>Ark Diamond Outreach</h1><p>Loading your city campaigns, buyers and leads.</p></div></div>
+  </main>
+  <nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+</div>
+<div class="more" id="more" role="dialog" aria-modal="true" aria-label="More" hidden>
+  <div class="more-scrim" data-act="more-close"></div>
+  <div class="more-sheet">
+    <div class="more-head"><h2 class="more-title">More</h2><button type="button" class="btn quiet" data-act="more-close" aria-label="Close"><svg class="svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <nav class="more-nav" id="more-nav" aria-label="More pages"></nav>
+    <div class="more-foot" id="more-foot"></div>
+  </div>
+</div>
+<div id="layer"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="config.js?v=cf50d521a2"></script>
+<script src="bridge.js?v=cf50d521a2"></script>
+</body>
+</html>
