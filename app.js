@@ -347,6 +347,7 @@ const ICONS = {
   receipt: '<path d="M6 3.5h12V21l-2.4-1.5L13 21l-2.4-1.5L8 21l-2-1.3z"/><path d="M9 8h6M9 11.5h6M9 15h3.5"/>',
   map: '<path d="M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z"/><path d="M9 4.5v13M15 6.5v13"/>',
   chev: '<path d="m7 10 5 5 5-5"/>',
+  next: '<path d="m9.5 6 6 6-6 6"/>',
   calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h.01M12 18h.01M15 18h.01"/>',
 };
 const ico = (n, cls = 'svg') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -374,7 +375,7 @@ const S = {
   settingsDoc: null,
   suppressDoc: null,
   route: { view: 'today', id: null },
-  filters: { buyers: { q: '', country: '', city: '', type: '', status: '', lab: '' }, leads: { tab: 'needs', stage: '' }, city: { tab: 'review' }, reports: { country: '', city: '', period: 'all' }, calendar: { country: null }, places: { q: '', tab: 'ind' }, posts: 'idea' },
+  filters: { buyers: { q: '', country: '', city: '', type: '', status: '', lab: '' }, leads: { tab: 'needs', stage: '' }, city: { tab: 'review' }, reports: { country: '', city: '', period: 'all' }, calendar: { country: null }, places: { q: '', tab: 'ind' }, orders: { q: '', tab: 'open' }, posts: 'idea' },
   selection: new Set(),
   layer: null,
   form: {},
@@ -1828,7 +1829,7 @@ function researchPanel(key, r) {
   const bar = `<div class="progress" role="progressbar" aria-label="Showrooms checked" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${(done / total * 100).toFixed(1)}%"></i></div>`;
   if (!st) {
     if (!canFind()) return '';
-    return `<section class="panel research">${head}<p class="muted" style="margin:0">Claude can look up every independent showroom here: its website, email, Instagram, the owner's name and, in the UK, whether it's a limited company. It works in the background, ${RESEARCH_BATCH} shops every ${RESEARCH_EVERY_H} hours, so you can close the app. What it finds shows here and goes onto the shops you add.</p><div class="actions"><button type="button" class="btn" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
+    return `<section class="panel research">${head}<p class="muted" style="margin:0">Claude finds each independent showroom's website, email, Instagram and owner, and in the UK its company type. It works in the background, ${RESEARCH_BATCH} shops every ${RESEARCH_EVERY_H} hours, so you can close the app.</p><div class="actions"><button type="button" class="btn primary" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
   }
   if (st === 'done') {
     const n = (f) => r.ind.filter((x) => x.s.checked && f(x.s)).length; const em = n((s) => s.email), web = n((s) => s.website), lf = n((s) => s.legalForm);
@@ -2191,11 +2192,14 @@ function render() {
   const f = captureFocus();
   renderNav();
   $('#main').innerHTML = `<div class="wrap">${viewHtml()}</div>`;
+  const h1 = $('#main .head h1'); if (h1 && h1.textContent.trim() === pageTitle()) h1.classList.add('same');
   mountMap();
   $('#layer').innerHTML = S.layer ? layerHtml() : '';
   restoreFocus(f);
 }
-/* ---------- shell: sidebar on desktop; top bar, tab bar and the More sheet on phones ---------- */
+/* ---------- shell: the bar with the page name, the tab bar and the More sheet, on every screen ---------- */
+const PAGE_TITLE = { today: 'Today', showrooms: 'Showrooms', leads: 'Leads', orders: 'Orders', buyers: 'Buyers', cities: 'Campaigns', city: 'Campaigns', trips: 'Visits', trip: 'Visits', prices: 'Prices', calendar: 'Calendar', reports: 'Reports', sequence: 'Messages', connections: 'Connections' };
+const pageTitle = () => PAGE_TITLE[S.route.view] || 'Today';
 const TAB_VIEWS = ['today', 'showrooms', 'leads', 'orders'];
 const MORE_VIEWS = ['buyers', 'cities', 'trips', 'prices', 'calendar', 'reports', 'sequence', 'connections'];
 const MORE_ICON = '<svg class="svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor"/></svg>';
@@ -2227,9 +2231,6 @@ function initShell() {
     if (e.shiftKey ? (a === first || !m.contains(a)) : (a === last || !m.contains(a))) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
   });
   window.addEventListener('hashchange', () => closeMore());
-  const wide = window.matchMedia('(min-width: 861px)');
-  const onWide = () => { if (wide.matches) closeMore(false); };
-  if (wide.addEventListener) wide.addEventListener('change', onWide); else if (wide.addListener) wide.addListener(onWide);
 }
 function renderNav() {
   const waiting = focusBiz().filter(needsReply).length; const ordersDue = orderTodos().length;
@@ -2237,15 +2238,14 @@ function renderNav() {
   const cur = S.route.view === 'city' ? 'cities' : S.route.view === 'trip' ? 'trips' : S.route.view;
   const link = ([k, label, i, n]) => `<a href="#${k}" ${cur === k ? 'aria-current="page"' : ''}>${ico(i)}<span>${label}</span>${n ? `<span class="badge" aria-label="${n} waiting">${n}</span>` : ''}</a>`;
   const byKey = Object.fromEntries(items.map((x) => [x[0], x]));
-  setShell('nav', items.filter((x) => !MORE_VIEWS.includes(x[0])).map(link).join('') + '<span class="nav-sep" aria-hidden="true"></span>' + items.filter((x) => MORE_VIEWS.includes(x[0])).map(link).join(''));
-  setShell('focus-top', focusPill()); setShell('focus-side', `<span class="lab">Working on</span>${focusPill()}`);
+  setShell('page-title', esc(pageTitle())); setShell('focus-top', focusPill());
   setShell('tabbar', TAB_VIEWS.map((k) => link(byKey[k])).join('') + `<button type="button" id="tab-more" data-act="more" aria-haspopup="dialog" aria-controls="more" ${MORE_VIEWS.includes(cur) ? 'aria-current="page"' : ''}>${MORE_ICON}<span>More</span></button>`);
   const more = $('#tab-more'); if (more) more.setAttribute('aria-expanded', String(moreOpen()));
   setShell('more-nav', MORE_VIEWS.map((k) => link(byKey[k])).join(''));
   const total = S.campaigns.size + S.businesses.size + S.quotes.size + S.samples.size + S.broadcasts.size + S.posts.size + S.orders.size + S.prices.size + S.trips.size + S.places.size + S.research.size;
   const modeNote = S.mode === 'db' ? `<b>${total.toLocaleString('en-US')}</b> of ${CAP.toLocaleString('en-US')} records used.` : S.mode === 'local' ? "<b>Practice mode.</b> Changes here aren't saved." : '';
   const foot = `${modeNote}<br>Channels connect at the end.`;
-  setShell('side-foot', foot); setShell('more-foot', foot);
+  setShell('more-foot', foot);
 }
 function viewHtml() {
   if (S.mode === 'loading' || (S.mode === 'db' && !(S.loaded.campaigns && S.loaded.businesses && S.loaded.settings))) {
@@ -2318,41 +2318,66 @@ function todayData() {
   const pitch = SEASONS.filter((x) => seasonPhase(x) === 'now' && (!mine.size || x.countries.some((c) => mine.has(c))));
   return { emails, tasks, waiting, follow, samples, retry, bcs, pitch, orders: orderTodos() };
 }
+function helloCard(t) {
+  const now = new Date(); const hr = now.getHours(); const f = focusNow();
+  const first = String(settings().company.senderName || '').trim().split(/\s+/)[0];
+  const hello = `${hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}`;
+  const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const go = `<span class="go">${ico('next')}</span>`;
+  const row = (icon, label, value, to) => {
+    const inner = `${ico(icon)}<span><b>${label}:</b> ${value}</span>`;
+    if (!to) return `<div class="hello-row">${inner}</div>`;
+    return to.startsWith('#') ? `<a class="hello-row" href="${to}">${inner}${go}</a>` : `<button type="button" class="hello-row" data-act="jump" data-target="${to}">${inner}${go}</button>`;
+  };
+  const doc = f.city ? S.places.get(placeKey(f.country, f.city)) : null;
+  const running = [...S.campaigns.values()].filter((c) => inFocus(c) && campaignPhase(c).key === 'running').length;
+  let place = row('megaphone', 'Campaigns running', String(running), '#cities');
+  if (doc) {
+    const rs = researchOf(placeKey(f.country, f.city)); const n = (doc.shops || []).length;
+    const res = !rs ? '' : rs.status === 'done' ? ', details found' : rs.status === 'stopped' ? ', details stopped' : ', finding details';
+    place = row('store', `Showrooms in ${esc(f.city)}`, `${n} found${res}`, '#showrooms');
+  }
+  const w = t.waiting.length; const o = t.orders.length;
+  return `<h1 class="sr-only">Today</h1>
+  <section class="hello" aria-label="Your day">
+    <h2>${esc(hello)}</h2>
+    <p class="eyebrow">${esc(dateLabel)} · ${esc(focusName())}</p>
+    ${row('chat', 'Replies waiting', w ? `<span class="hot">${w}</span>` : '0', w ? 'sec-replies' : '')}
+    ${row('mail', 'Emails due today', String(t.emails.length), t.emails.length ? 'sec-emails' : '')}
+    ${row('check', 'Your tasks', String(t.tasks.length), t.tasks.length ? 'sec-tasks' : '')}
+    ${row('receipt', 'Orders', o ? `${o} need${o === 1 ? 's' : ''} you` : 'nothing due', '#orders')}
+    ${place}
+    <button class="btn" data-act="log-reply">${ico('chat')}Log a reply</button>
+  </section>`;
+}
 function todayView() {
   const t = todayData(); const st = settings();
-  const running = [...S.campaigns.values()].filter((c) => inFocus(c) && campaignPhase(c).key === 'running').length;
-  const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
   const retrySpan = Math.max(0, ...stepsFor('retry').map((x) => Number(x.day) || 0));
   const pitchNames = [...new Set(t.pitch.map((x) => x.name))];
+  const visitsToday = tripsList().some((tr) => (tr.stops || []).some((st) => tripDay(tr.startDate, st.day) === todayStr()));
+  const quiet = !gmailOn() && !visitsToday && ![t.waiting, t.tasks, t.emails, t.orders, t.bcs, t.samples, t.follow, t.retry].some((x) => x.length);
   return `
-  <header class="head"><div><div class="eyebrow">${esc(dateLabel)} · ${esc(focusName())}</div><h1>Today</h1><p>Answer replies first, then do your tasks and send the emails that are due.</p></div>
-    <div class="actions"><button class="btn" data-act="log-reply">${ico('chat')}Log a reply</button></div></header>
+  ${helloCard(t)}
   ${outsideBanner()}
   ${researchBanner()}
-  ${t.emails.length || t.tasks.length ? notConnectedBanner() : ''}
-  ${pitchNames.length ? `<div class="banner plain">${ico('calendar')}<p><b>Retailers are ordering now for ${esc(listAnd(pitchNames))}.</b> Send your leads a seasonal offer before the window closes. <a href="#calendar">Open the calendar</a></p></div>` : ''}
-  <div class="tiles">
-    ${tile(t.waiting.length, 'Replies waiting for you', t.waiting.length ? 'alert' : '', '#leads')}
-    ${tile(t.tasks.length, 'Your tasks due')}
-    ${tile(t.emails.length, 'Emails due')}
-    ${tile(running, 'Campaigns running', '', '#cities')}
-  </div>
   ${visitsTodaySection()}
-  <section class="section"><div class="sec-head"><h2>Waiting for your reply <span class="count">${t.waiting.length}</span></h2>${gmailOn() ? `<button class="btn small" data-act="gm-sync" ${S.gm.sync.running ? 'disabled' : ''}>${ico('refresh')}${S.gm.sync.running ? 'Checking Gmail…' : 'Check Gmail'}</button>` : ''}</div>
+  ${quiet ? emptyBox("You're all caught up. New replies, tasks and emails that fall due show up here.", `<a class="btn" href="#showrooms">${ico('store')}Showrooms</a>`) : ''}
+  ${t.waiting.length || gmailOn() ? `<section class="section" id="sec-replies"><div class="sec-head"><h2>Waiting for your reply <span class="count">${t.waiting.length}</span></h2>${gmailOn() ? `<button class="btn small" data-act="gm-sync" ${S.gm.sync.running ? 'disabled' : ''}>${ico('refresh')}${S.gm.sync.running ? 'Checking Gmail…' : 'Check Gmail'}</button>` : ''}</div>
     ${gmailOn() ? `<p class="hint">${esc(syncLine())}</p>` : ''}
     ${t.waiting.length ? `<div class="list">${t.waiting.map(waitingItem).join('')}</div>` : emptyBox(gmailOn() ? 'No replies waiting. Replies from Gmail land here by themselves, and the app reminds you until you answer.' : 'No replies waiting. When a buyer answers, log it with <b>Log a reply</b> and the app reminds you until you respond.')}
-  </section>
+  </section>` : ''}
   ${t.orders.length ? `<section class="section"><h2>Orders <span class="count">${t.orders.length}</span></h2><div class="list">${t.orders.map(({ o, t: td }) => orderItem(o, td)).join('')}</div></section>` : ''}
-  <section class="section"><h2>Your tasks <span class="count">${t.tasks.length}</span></h2>
-    ${t.tasks.length ? `<div class="list">${t.tasks.map(taskItem).join('')}</div>` : emptyBox('Nothing for you to send by hand today. Instagram, Facebook, LinkedIn and phone steps appear here on their day.')}
-  </section>
-  ${emailsSection(t)}
+  ${t.tasks.length ? `<section class="section" id="sec-tasks"><h2>Your tasks <span class="count">${t.tasks.length}</span></h2>
+    <div class="list">${t.tasks.map(taskItem).join('')}</div>
+  </section>` : ''}
+  ${t.emails.length || S.gm.batch ? emailsSection(t) : ''}
   ${t.bcs.length ? `<section class="section"><h2>Broadcasts to send <span class="count">${t.bcs.reduce((a, x) => a + x.left, 0)}</span></h2><div class="list">${t.bcs.map(({ bc, left }) => `<div class="item"><div class="stack"><div class="title-row">${chLabel(bc.channel)}<button class="linkish" data-act="bc-open" data-id="${esc(bc.id)}">${esc(bc.title)}</button>${exChip(bc)}</div><div class="meta"><span>${left} left to send</span><span>${esc(SEGMENT_LABEL[(bc.audience || {}).segment] || '')}</span></div></div><div class="actions"><button class="btn small primary" data-act="bc-open" data-id="${esc(bc.id)}">Open</button></div></div>`).join('')}</div></section>` : ''}
   ${t.samples.length ? `<section class="section"><h2>Samples to follow up <span class="count">${t.samples.length}</span></h2><div class="list">${t.samples.map(sampleDueItem).join('')}</div></section>` : ''}
   ${t.follow.length ? `<section class="section"><h2>Follow-ups due <span class="count">${t.follow.length}</span></h2><div class="list">${t.follow.map(followItem).join('')}</div></section>` : ''}
   ${t.retry.length ? `<section class="section"><div class="sec-head"><h2>Ready for a second try <span class="count">${t.retry.length}</span></h2><button class="btn small" data-act="retry-all">${ico('refresh')}Start for all ${t.retry.length}</button></div>
     <p class="hint">These buyers finished the follow-up ${esc(st.rules.retryAfterDays)} or more days ago without answering. The second try is a short ${retrySpan}-day sequence about new designs.</p>
-    <div class="list">${t.retry.slice(0, 25).map(retryItem).join('')}</div>${t.retry.length > 25 ? `<p class="hint">And ${t.retry.length - 25} more.</p>` : ''}</section>` : ''}`;
+    <div class="list">${t.retry.slice(0, 25).map(retryItem).join('')}</div>${t.retry.length > 25 ? `<p class="hint">And ${t.retry.length - 25} more.</p>` : ''}</section>` : ''}
+  ${pitchNames.length ? `<div class="banner plain">${ico('calendar')}<p><b>Retailers are ordering now for ${esc(listAnd(pitchNames.length > 2 ? [...pitchNames.slice(0, 2), 'more'] : pitchNames))}.</b> Send your leads an offer. <a href="#calendar">Open the calendar</a></p></div>` : ''}`;
 }
 // Anything waiting outside the place you're working on still gets a mention, so nothing slips.
 function outsideBanner() {
@@ -2367,10 +2392,11 @@ function outsideBanner() {
 function waitingItem(b) {
   const l = b.lead; const h = hoursSince(l.lastInAt); const last = inbound(b).slice(-1)[0];
   const tone = h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad';
-  return `<div class="item"><div class="stack">
-    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}<span class="chip ${tone}">${ico('clock')}waiting ${fmtWait(h)}</span>${windowChip(l.lastInAt, l.lastChannel)}</div>
-    <div class="meta">${chLabel(l.lastChannel)}<span>${esc(b.city)}, ${esc(b.country)}</span>${tagChip(last && last.tag)}<span>${esc(reminderText(l))}</span>${['phone', 'whatsapp'].includes(l.lastChannel) ? localChip(b) : ''}</div>
+  return `<div class="item tap"><div class="stack">
+    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta">${chLabel(l.lastChannel)}<span>${esc(b.city)}, ${esc(b.country)}</span><span>${esc(reminderText(l))}</span></div>
     ${last ? `<div class="msg quote">${esc(trunc(last.text, 260))}</div>` : ''}
+    <div class="tags"><span class="chip ${tone}">${ico('clock')}waiting ${fmtWait(h)}</span>${windowChip(l.lastInAt, l.lastChannel)}${tagChip(last && last.tag)}${['phone', 'whatsapp'].includes(l.lastChannel) ? localChip(b) : ''}${exChip(b)}</div>
   </div><div class="actions">
     <button class="btn small primary" data-act="open-biz" data-id="${esc(b.id)}">Reply</button>
     ${moreMenu('w:' + b.id, `<button class="btn small" data-act="answered" data-id="${esc(b.id)}">${ico('check')}Mark answered</button><button class="btn small" data-act="snooze" data-id="${esc(b.id)}" data-when="tomorrow">${ico('clock')}Remind me tomorrow</button>`)}
@@ -2380,15 +2406,16 @@ function taskItem(x) {
   const { b, step, due, channel } = x; const c = contactOf(b);
   const text = stepText(b, step, channel); const link = channelLink(b, channel, text);
   let note = '';
-  if (channel === 'phone') note = c.phone || c.whatsapp ? `<div class="meta">Phone <span class="mono sel">${esc(c.phone || c.whatsapp)}</span>${step.channel === 'whatsapp' ? '<span class="sub">No WhatsApp opt-in yet, so call instead.</span>' : ''}</div>` : '<div class="warnline">' + ico('alert') + 'No phone number on file. Add one or skip this step.</div>';
+  if (channel === 'phone') note = c.phone || c.whatsapp ? `<div class="meta"><span>Phone</span><span class="mono sel">${esc(c.phone || c.whatsapp)}</span>${step.channel === 'whatsapp' ? '<span class="sub">No WhatsApp opt-in yet, so call instead.</span>' : ''}</div>` : '<div class="warnline">' + ico('alert') + 'No phone number on file. Add one or skip this step.</div>';
   if (channel === 'instagram' && !c.instagram) note = `<div class="warnline">${ico('alert')}No Instagram handle on file. Add one or skip this step.</div>`;
   if (channel === 'whatsapp') note = `<div class="meta sub">They opted in. The app sends this by itself once WhatsApp is connected.</div>`;
   const key = `task:${b.id}:${step.id}`; const opened = !link || S.mailOpened.has(key); const ids = `data-id="${esc(b.id)}" data-step="${esc(step.id)}"`;
   const openBtn = (primary) => `<a class="btn small${primary ? ' primary' : ''}" href="${esc(link)}" target="_blank" rel="noopener" data-act="mail-open" data-key="${esc(key)}"${channel === 'whatsapp' ? '' : ` data-copy="${esc(b.id)}:${esc(step.id)}"`}>${ico('ext')}Open ${esc(CH_LABEL[channel])}</a>`;
   const doneBtn = (primary) => `<button class="btn small${primary ? ' primary' : ''}" data-act="step-done" ${ids} data-how="done">${ico('check')}Done</button>`;
   return `<div class="item"><div class="stack">
-    <div class="title-row">${chLabel(channel)}<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}${dueChip(due)}</div>
-    <div class="meta"><span>${esc(b.city)}, ${esc(b.country)}</span><span>${esc(SEQ_SHORT[seqKindOf(b)] + step.title)}</span>${['phone', 'whatsapp'].includes(channel) ? localChip(b) : ''}</div>
+    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta">${chLabel(channel)}<span>${esc(b.city)}, ${esc(b.country)}</span><span>${esc(SEQ_SHORT[seqKindOf(b)] + step.title)}</span></div>
+    <div class="tags">${dueChip(due)}${['phone', 'whatsapp'].includes(channel) ? localChip(b) : ''}${exChip(b)}</div>
     <div class="msg">${esc(text)}</div>${note}
   </div><div class="actions">
     ${opened ? doneBtn(true) : openBtn(true)}
@@ -2401,8 +2428,9 @@ function emailItem(x) {
   const key = `step:${b.id}:${step.id}`; const gm = gmailOn() && !!c.email; const busy = S.gm.busy === key;
   const pm = !gm && phoneMail() && !!c.email; const opened = S.mailOpened.has(key);
   return `<div class="item"><div class="stack">
-    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}${dueChip(due)}</div>
-    <div class="meta">${c.email ? `<span class="mono sel">${esc(c.email)}</span>` : '<span class="chip warn">No email address</span>'}<span>${esc(SEQ_SHORT[seqKindOf(b)] + step.title)}</span><span>${esc(b.city)}</span>${e.variant ? `<span class="chip">Subject ${e.variant}</span>` : ''}</div>
+    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta">${c.email ? `<span class="mono sel">${esc(c.email)}</span>` : ''}<span>${esc(SEQ_SHORT[seqKindOf(b)] + step.title)}</span><span>${esc(b.city)}</span></div>
+    <div class="tags">${dueChip(due)}${c.email ? '' : '<span class="chip warn">No email address</span>'}${e.variant ? `<span class="chip">Subject ${e.variant}</span>` : ''}${exChip(b)}</div>
     <div class="subj">${esc(e.subject)}</div>
     ${issues.length ? `<div class="warnline">${ico('alert')}${esc(issues.join(' · '))}</div>` : ''}
   </div><div class="actions">
@@ -2413,20 +2441,23 @@ function emailItem(x) {
   </div>${S.gm.confirm === key ? sendConfirm(c.email, issues, 'gm-send-go', 'Send') : ''}</div>`;
 }
 function followItem(b) {
-  return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}${stageChip(b.lead.stage)}<span class="chip warn">Follow up ${esc(fmtDay(b.lead.followUpAt))}</span></div>
-    <div class="meta"><span>${esc(b.city)}, ${esc(b.country)}</span>${b.lead.ordersValue ? `<span>${money(b.lead.ordersValue)} ordered</span>` : ''}</div></div>
-    <div class="actions"><button class="btn small primary" data-act="open-biz" data-id="${esc(b.id)}">Open</button>${moreMenu('f:' + b.id, `<button class="btn small quiet" data-act="clear-follow" data-id="${esc(b.id)}">Clear follow-up</button>`)}</div></div>`;
+  return `<div class="item tap corner"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta"><span>${esc(b.city)}, ${esc(b.country)}</span>${b.lead.ordersValue ? `<span>${money(b.lead.ordersValue)} ordered</span>` : ''}</div>
+    <div class="tags">${stageChip(b.lead.stage)}<span class="chip warn">Follow up ${esc(fmtDay(b.lead.followUpAt))}</span>${exChip(b)}</div></div>
+    <div class="actions">${moreMenu('f:' + b.id, `<button class="btn small quiet" data-act="clear-follow" data-id="${esc(b.id)}">Clear follow-up</button>`)}</div></div>`;
 }
 function sampleDueItem(x) {
   const b = S.businesses.get(x.businessId);
-  return `<div class="item"><div class="stack"><div class="title-row"><span class="ch">${ico('box')}Samples</span><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}<span class="chip warn">Check in ${esc(fmtDay(x.checkAt))}</span></div>
-    <div class="meta"><span>${esc(x.pieces || 'Samples')}, sent ${esc(fmtDay(x.sentAt))}</span><span>${esc(SAMPLE_LABEL[x.status] || x.status)}</span>${localChip(b)}</div>
+  return `<div class="item tap corner"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta"><span class="ch">${ico('box')}Samples</span><span>${esc(x.pieces || 'Samples')}, sent ${esc(fmtDay(x.sentAt))}</span><span>${esc(SAMPLE_LABEL[x.status] || x.status)}</span></div>
+    <div class="tags"><span class="chip warn">Check in ${esc(fmtDay(x.checkAt))}</span>${localChip(b)}${exChip(b)}</div>
     <div class="sub">Ask whether the pieces arrived, what they think, and whether to prepare an order.</div></div>
-    <div class="actions"><button class="btn small primary" data-act="open-biz" data-id="${esc(b.id)}">Open</button>${moreMenu('sd:' + x.id, `${sampleButtons(x).replace(/ primary/g, '')}<button class="btn small quiet" data-act="sample-snooze" data-id="${esc(x.id)}">Ask again in 3 days</button>`)}</div></div>`;
+    <div class="actions">${moreMenu('sd:' + x.id, `${sampleButtons(x).replace(/ primary/g, '')}<button class="btn small quiet" data-act="sample-snooze" data-id="${esc(x.id)}">Ask again in 3 days</button>`)}</div></div>`;
 }
 function retryItem(b) {
-  return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}</div>
-    <div class="meta"><span>${esc(b.city)}, ${esc(b.country)}</span><span>Follow-up ended ${esc(fmtDay(String(b.closedAt).slice(0, 10)))}</span></div></div>
+  return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta"><span>${esc(b.city)}, ${esc(b.country)}</span><span>Follow-up ended ${esc(fmtDay(String(b.closedAt).slice(0, 10)))}</span></div>
+    <div class="tags">${exChip(b)}</div></div>
     <div class="actions"><button class="btn small primary" data-act="retry-one" data-id="${esc(b.id)}">${ico('refresh')}Start second try</button>${moreMenu('r:' + b.id, `<button class="btn small quiet" data-act="retry-skip" data-id="${esc(b.id)}">Leave them</button>`)}</div></div>`;
 }
 
@@ -2598,7 +2629,7 @@ function showroomsView() {
   const areas = r.areas.slice(0, 8); const amax = Math.max(1, ...areas.map((a) => a.n));
   const fetched = String(doc.fetchedAt || '').slice(0, 10);
   return head(`<p>${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}.</p>`,
-    `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button>${moreMenu('places', `<button class="btn small" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Searching…' : 'Search again'}</button><button class="btn small" data-act="focus-open">${ico('pin')}Another city</button>`)}</div>`) + `
+    `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button><button class="btn" data-act="focus-open">${ico('pin')}Change city</button>${moreMenu('places', `<button class="btn small" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Searching…' : 'Search again'}</button>`)}</div>`) + `
   <div class="tiles">${tile(r.total, 'Showrooms')}${tile(r.ind.length, 'Independent')}${tile(r.chains.length, 'Chains')}${tile(r.mine.length, 'Your buyers')}</div>
   ${busy ? `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(S.find.step)}…</b></p><button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button></div>` : ''}
   ${researchPanel(key, r)}
@@ -2619,12 +2650,14 @@ function shopItem(x, doc, key, picked) {
   const { s, b } = x; const site = safeUrl(s.website); const tel = String(s.phone || '').replace(/[^\d+]/g, '');
   const where = [s.street, s.postcode ? `${s.postcode}${s.near ? ' (nearby)' : ''}` : ''].filter(Boolean).join(', ') || s.area || s.town || '';
   const extra = `${picked ? '' : `<button type="button" class="btn small" data-act="places-show" data-id="${esc(s.id)}">${ico('pin')}Show on map</button>`}<a class="btn small" href="${esc(shopMapsUrl(s, doc))}" target="_blank" rel="noopener">${ico('route')}Directions</a>${tel ? `<a class="btn small" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}${site ? `<a class="btn small" href="${esc(site)}" target="_blank" rel="noopener">${ico('ext')}Website</a>` : ''}${igUrl(s.instagram) ? `<a class="btn small" href="${esc(igUrl(s.instagram))}" target="_blank" rel="noopener">${ico('camera')}Instagram</a>` : ''}${picked ? `<button type="button" class="btn small quiet" data-act="places-unsel">Close</button>` : ''}`;
-  return `<div class="item"><div class="stack">
-    <div class="title-row">${b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(s.name)}</button>` : `<b>${esc(s.name)}</b>`}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${s.closed ? '<span class="chip warn">May have closed</span>' : ''}${b ? (b.lead ? stageChip(b.lead.stage) : statusChip(b)) : ''}</div>
+  const tags = `${b ? (b.lead ? stageChip(b.lead.stage) : statusChip(b)) : ''}${s.labGrown ? '<span class="chip good">Sells lab-grown</span>' : ''}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${s.closed ? '<span class="chip warn">May have closed</span>' : ''}`;
+  return `<div class="item${b ? ' tap corner' : ''}"><div class="stack">
+    <div class="title-row">${b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(s.name)}</button>` : `<b>${esc(s.name)}</b>`}</div>
     <div class="meta">${where ? `<span>${esc(where)}</span>` : ''}${s.phone ? `<span class="mono">${esc(s.phone)}</span>` : ''}${site ? `<span>${esc(cleanDomain(site))}</span>` : ''}${s.email ? `<span class="mono sel">${esc(s.email)}</span>` : ''}</div>
-    ${s.person || s.legalForm || s.labGrown ? `<div class="meta">${s.person ? `<span>${esc(s.person)}</span>` : ''}${s.legalForm ? `<span>${esc(LEGAL_LABEL[s.legalForm] || s.legalForm)}${s.companyNo ? `, no. ${esc(s.companyNo)}` : ''}</span>` : ''}${s.labGrown ? '<span class="labmark">sells lab-grown</span>' : ''}</div>` : ''}
+    ${s.person || s.legalForm ? `<div class="meta">${s.person ? `<span>${esc(s.person)}</span>` : ''}${s.legalForm ? `<span>${esc(LEGAL_LABEL[s.legalForm] || s.legalForm)}${s.companyNo ? `, no. ${esc(s.companyNo)}` : ''}</span>` : ''}</div>` : ''}
     ${s.note ? `<div class="sub">${esc(s.note)}</div>` : ''}
-  </div><div class="actions">${b ? `<button class="btn small" data-act="open-biz" data-id="${esc(b.id)}">Open</button>` : `<button class="btn small primary" data-act="places-add" data-key="${esc(key)}" data-id="${esc(s.id)}">${ico('plus')}Add</button>`}${moreMenu('shop:' + s.id + (picked ? ':p' : ''), extra)}</div></div>`;
+    <div class="tags">${tags}</div>
+  </div><div class="actions">${b ? '' : `<button class="btn small primary" data-act="places-add" data-key="${esc(key)}" data-id="${esc(s.id)}">${ico('plus')}Add</button>`}${moreMenu('shop:' + s.id + (picked ? ':p' : ''), extra)}</div></div>`;
 }
 function focusModal() {
   const f = focusNow(); const country = fv('fc.country', f.country);
@@ -2653,7 +2686,7 @@ function buyersView() {
   const fo = focusNow(); const mine = focusBiz();
   const countries = [...new Set(mine.map((b) => b.country).filter(Boolean))].sort();
   const cities = [...new Set(mine.filter((b) => !f.country || b.country === f.country).map((b) => b.city).filter(Boolean))].sort();
-  return `<header class="head"><div><h1>Buyers</h1><p>Every jeweller, chain and lab-grown buyer in ${esc(focusName(fo))}.</p></div><div class="actions"><button class="btn" data-act="buyers-export">${ico('download')}Export CSV</button></div></header>
+  return `<header class="head"><div><h1>Buyers</h1><p>Every jeweller, chain and lab-grown buyer ${fo.country ? `in ${esc(focusName(fo))}` : 'on your list'}.</p></div><div class="actions"><button class="btn" data-act="buyers-export">${ico('download')}Export CSV</button></div></header>
   <div class="filters">
     <input class="input search" id="f-q" type="search" placeholder="Search name, city, email" value="${esc(f.q)}" data-filter="buyers.q" aria-label="Search buyers">
     ${fo.country ? '' : selectHtml('f-country', 'data-filter="buyers.country" aria-label="Country"', countries.map((x) => [x, x]), f.country, 'All countries')}
@@ -2679,8 +2712,8 @@ function leadsView() {
   const openQuotes = [...S.quotes.values()].filter((q) => q.status === 'sent' && inFocus(S.businesses.get(q.businessId), fo));
   const pipeline = openQuotes.reduce((a, q) => a + quoteUsd(q), 0);
   const samplesOut = [...S.samples.values()].filter((x) => ['sent', 'delivered', 'kept'].includes(x.status) && inFocus(S.businesses.get(x.businessId), fo)).length;
-  return `<header class="head"><div><h1>Leads</h1><p>Everyone who answered, on any channel. The app reminds you until each one has a reply.</p></div><div class="actions"><button class="btn primary" data-act="log-reply">${ico('chat')}Log a reply</button></div></header>
-  <div class="tiles tight">${stageCounts.map(([k, label, n]) => `<button type="button" class="tile" data-act="lead-stage" data-val="${k}" style="text-align:left;cursor:pointer"><span class="n">${n}</span><span class="l">${label}</span></button>`).join('')}</div>
+  return `<header class="head"><div><h1>Leads</h1></div><div class="actions"><button class="btn primary" data-act="log-reply">${ico('chat')}Log a reply</button><a class="btn" href="#buyers">${ico('people')}All buyers</a></div></header>
+  <div class="tiles tight">${stageCounts.map(([k, label, n]) => `<button type="button" class="tile" data-act="lead-stage" data-val="${k}"><span class="n">${n}</span><span class="l">${label}</span></button>`).join('')}</div>
   ${openQuotes.length || samplesOut ? `<p class="muted" style="margin:0">${openQuotes.length ? `<b>${openQuotes.length}</b> open ${openQuotes.length === 1 ? 'quote' : 'quotes'}${pipeline ? ` worth <b>${money(pipeline)}</b>` : ''}` : ''}${openQuotes.length && samplesOut ? ' · ' : ''}${samplesOut ? `<b>${samplesOut}</b> sample ${samplesOut === 1 ? 'parcel' : 'parcels'} out` : ''}</p>` : ''}
   <div class="sec-head">${seg('leads', f.tab, [['needs', `Needs reply (${needs.length})`], ['snoozed', `Snoozed (${snoozed.length})`], ['all', `All leads (${leads.length})`]])}
     ${f.tab === 'all' ? selectHtml('f-stage', 'data-filter="leads.stage" aria-label="Stage"', STAGES, f.stage, 'Every stage') : ''}</div>
@@ -2689,14 +2722,15 @@ function leadsView() {
 function leadItem(b) {
   const l = b.lead; const last = (b.messages || []).slice(-1)[0];
   const waiting = l.awaitingReply; const h = l.lastInAt ? hoursSince(l.lastInAt) : 0;
-  return `<div class="item"><div class="stack">
-    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}${stageChip(l.stage)}${waiting ? `<span class="chip ${needsReply(b) ? (h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad') : ''}">${ico('clock')}${needsReply(b) ? `waiting ${fmtWait(h)}` : `snoozed until ${esc(fmtWhen(l.remindAt))}`}</span>` : ''}${waiting ? windowChip(l.lastInAt, l.lastChannel) : ''}</div>
-    <div class="meta">${chLabel(l.lastChannel)}<span>${esc(b.city)}, ${esc(b.country)}</span>${l.ordersValue ? `<span class="chip gold">${money(l.ordersValue)} ordered</span>` : ''}${l.followUpAt ? `<span>Follow up ${esc(fmtDay(l.followUpAt))}</span>` : ''}${waiting && needsReply(b) ? `<span>${esc(reminderText(l))}</span>` : ''}</div>
+  return `<div class="item tap"><div class="stack">
+    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta">${chLabel(l.lastChannel)}<span>${esc(b.city)}, ${esc(b.country)}</span>${l.followUpAt ? `<span>Follow up ${esc(fmtDay(l.followUpAt))}</span>` : ''}${waiting && needsReply(b) ? `<span>${esc(reminderText(l))}</span>` : ''}</div>
     ${last ? `<div class="msg ${last.dir === 'in' ? 'quote' : ''}">${last.dir === 'out' ? 'You: ' : ''}${esc(trunc(last.text, 220))}</div>` : ''}
-  </div><div class="actions">
-    <button class="btn small ${waiting ? 'primary' : ''}" data-act="open-biz" data-id="${esc(b.id)}">${waiting ? 'Reply' : 'Open'}</button>
-    ${waiting ? moreMenu('l:' + b.id, `<button class="btn small" data-act="answered" data-id="${esc(b.id)}">${ico('check')}Mark answered</button>`) : ''}
-  </div></div>`;
+    <div class="tags">${stageChip(l.stage)}${waiting ? `<span class="chip ${needsReply(b) ? (h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad') : ''}">${ico('clock')}${needsReply(b) ? `waiting ${fmtWait(h)}` : `snoozed until ${esc(fmtWhen(l.remindAt))}`}</span>` : ''}${waiting ? windowChip(l.lastInAt, l.lastChannel) : ''}${l.ordersValue ? `<span class="chip gold">${money(l.ordersValue)} ordered</span>` : ''}${exChip(b)}</div>
+  </div>${waiting ? `<div class="actions">
+    <button class="btn small primary" data-act="open-biz" data-id="${esc(b.id)}">Reply</button>
+    ${moreMenu('l:' + b.id, `<button class="btn small" data-act="answered" data-id="${esc(b.id)}">${ico('check')}Mark answered</button>`)}
+  </div>` : `<span class="go" aria-hidden="true">${ico('next')}</span>`}</div>`;
 }
 
 /* ---------- Reports ---------- */
@@ -2778,7 +2812,7 @@ function reportsView() {
   <div class="filters">${fo.country ? '' : selectHtml('r-country', 'data-filter="reports.country" aria-label="Country"', countries.map((x) => [x, x]), f.country, 'All countries')}
     ${fo.city ? '' : selectHtml('r-city', 'data-filter="reports.city" aria-label="City"', cities.map((x) => [x, x]), f.city, 'All cities')}
     ${seg('period', f.period, [['all', 'All time'], ['90', 'Last 90 days'], ['30', 'Last 30 days']])}</div>
-  <div class="tiles">${tile(t.found, 'Buyers found')}${tile(t.contacted, 'Contacted')}${tile(pct(t.rate), 'Reply rate')}${tile(t.orders, 'Orders')}${tile(money(t.revenue), 'Revenue, US$', 'money')}${tile(money(pipeline), 'Open quotes, US$')}</div>
+  <div class="tiles wide">${tile(t.found, 'Buyers found')}${tile(t.contacted, 'Contacted')}${tile(pct(t.rate), 'Reply rate')}${tile(t.orders, 'Orders')}${tile(money(t.revenue), 'Revenue, US$', 'money')}${tile(money(pipeline), 'Open quotes, US$')}</div>
   ${aiAvailable() ? `<div class="panel"><div class="sec-head"><h3>Claude's advice</h3>${S.ai.busy === 'advice' ? `<button class="btn small" data-act="ai-stop">${ico('stop')}Stop</button>` : `<button class="btn small" data-act="advice-run">${ico('spark')}${S.ai.advice ? 'Ask again' : 'What should I do next?'}</button>`}</div><p id="advice-text" class="advice-text">${S.ai.advice ? esc(S.ai.advice) : S.ai.busy === 'advice' ? 'Claude is reading your numbers…' : 'Claude reads these results, the coming seasons and fairs, and suggests what to do in the next two weeks.'}</p></div>` : ''}
   ${list.length ? `
   <div class="charts">
@@ -2947,7 +2981,7 @@ function emailsSection(t) {
     ? `Send each email from your Gmail with one tap.${auto.length > 1 ? ` <b>Send ${auto.length} with Gmail</b> sends them one every few seconds.` : ''}${held && auto.length ? ` ${held} ${held === 1 ? 'needs' : 'need'} a check first, so ${held === 1 ? 'it stays' : 'they stay'} for you to send one by one.` : ''}`
     : phoneMail() ? `Tap Open in ${mailAppName()}: the email opens with the address, subject and message filled in. Send it there, then tap Mark sent.`
     : "Email isn't connected yet, so copy each one into your mail app, send it, then mark it sent.";
-  return `<section class="section"><div class="sec-head"><h2>Emails due <span class="count">${t.emails.length}</span></h2><div class="actions">${auto.length > 1 && !bt ? `<button class="btn small primary" data-act="gm-send-all">${ico('mail')}Send ${auto.length} with Gmail</button>` : ''}${t.emails.length > 1 && !bt ? `<button class="btn small" data-act="mark-all-sent">${ico('check')}Mark all ${t.emails.length} as sent</button>` : ''}</div></div>
+  return `<section class="section" id="sec-emails"><div class="sec-head"><h2>Emails due <span class="count">${t.emails.length}</span></h2><div class="actions">${auto.length > 1 && !bt ? `<button class="btn small primary" data-act="gm-send-all">${ico('mail')}Send ${auto.length} with Gmail</button>` : ''}${t.emails.length > 1 && !bt ? `<button class="btn small" data-act="mark-all-sent">${ico('check')}Mark all ${t.emails.length} as sent</button>` : ''}</div></div>
     ${S.gm.confirm === 'all' && !bt ? `<div class="confirm" role="group" aria-label="Confirm sending"><p>Send ${auto.length} ${auto.length === 1 ? 'email' : 'emails'} from ${fromWho()}, one every few seconds?</p>${mismatchLine()}<button type="button" class="btn small primary" data-act="gm-send-all-go">${ico('mail')}Send ${auto.length}</button><button type="button" class="btn small quiet" data-act="gm-cancel">Cancel</button></div>` : ''}
     ${bt ? `<div class="banner">${ico('mail')}<p><b>Sent ${bt.sent} of ${bt.total}.</b> Keep this page open until it finishes.</p><button type="button" class="btn small" data-act="gm-stop">Stop</button></div>` : ''}
     ${t.emails.length ? `<p class="hint">${hint}</p><div class="list">${t.emails.map(emailItem).join('')}</div>` : emptyBox('No emails due today. Start a city campaign to fill this list.')}
@@ -2978,25 +3012,39 @@ function tradeSection() {
 /* ---------- Orders ---------- */
 function orderItem(o, todo) {
   const b = S.businesses.get(o.businessId); const total = orderTotal(o), paid = orderPaid(o);
-  return `<div class="item"><div class="stack">
-    <div class="title-row"><button class="linkish" data-act="order-open" data-id="${esc(o.id)}">${esc(o.number)}</button><span>${esc((o.buyer || {}).name || (b && b.name) || '')}</span><span class="chip ${ORDER_TONE[o.status] || ''}">${esc(ORDER_LABEL[o.status] || o.status)}</span></div>
-    <div class="meta"><span>${esc(fmtMoney(total, o.currency))}</span><span>${paid ? `${esc(fmtMoney(paid, o.currency))} received` : 'Nothing received yet'}</span><span>${esc(fmtDay(o.piDate))}</span>${b ? `<span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span>` : ''}</div>
-    ${todo ? `<div><span class="chip ${todo.tone}">${esc(todo.text)}</span></div>` : ''}
-  </div><div class="actions"><button class="btn small ${todo ? 'primary' : ''}" data-act="order-open" data-id="${esc(o.id)}">Open</button></div></div>`;
+  const who = (o.buyer || {}).name || (b && b.name) || '';
+  return `<div class="item tap"><div class="stack">
+    <div class="title-row"><button class="linkish" data-act="order-open" data-id="${esc(o.id)}">${esc(o.number)}${who ? ` · ${esc(who)}` : ''}</button></div>
+    <div class="meta"><span>${esc(fmtMoney(total, o.currency))}</span><span>${paid ? `${esc(fmtMoney(paid, o.currency))} received` : 'Nothing received yet'}</span><span>${esc(fmtDay(o.piDate))}</span>${b && b.city ? `<span>${esc(b.city)}</span>` : ''}</div>
+    <div class="tags"><span class="chip ${ORDER_TONE[o.status] || ''}">${esc(ORDER_LABEL[o.status] || o.status)}</span>${todo ? `<span class="chip ${todo.tone}">${esc(todo.text)}</span>` : ''}</div>
+  </div><span class="go" aria-hidden="true">${ico('next')}</span></div>`;
 }
 function ordersView() {
+  const fo = S.filters.orders; const q = fo.q.trim().toLowerCase();
   const all = focusOrders().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const open = all.filter(isOpenOrder); const todo = orderTodos(); const todoIds = new Set(todo.map((x) => x.o.id));
   const waitingPay = open.filter((o) => (o.status === 'pi' && orderPaid(o) + 0.005 < orderAdvance(o)) || (o.status !== 'pi' && orderDue(o) > 0)).length;
   const toShip = open.filter((o) => o.status === 'ready' && orderDue(o) <= 0).length;
-  const rest = open.filter((o) => !todoIds.has(o.id)); const done = all.filter((o) => !isOpenOrder(o)).slice(0, 30);
-  return `<header class="head"><div><h1>Orders</h1><p>Proforma invoices, payments and shipping for every order.</p></div>
-    <div class="actions"><button class="btn primary" data-act="order-new">${ico('receipt')}New proforma invoice</button></div></header>
+  const closed = all.filter((o) => !isOpenOrder(o));
+  const hit = (o) => { if (!q) return true; const b = S.businesses.get(o.businessId); return [o.number, (o.buyer || {}).name, b && b.name, b && b.city].join(' ').toLowerCase().includes(q); };
+  const tab = ['open', 'done', 'all'].includes(fo.tab) ? fo.tab : 'open';
+  const cards = (list) => `<div class="list">${list.map(({ o, t }) => orderItem(o, t)).join('')}</div>`;
+  let body = '';
+  if (tab === 'open') {
+    const needs = todo.filter(({ o }) => hit(o)); const rest = open.filter((o) => !todoIds.has(o.id) && hit(o));
+    body = `${needs.length ? `<section class="section"><h2>Needs you <span class="count">${needs.length}</span></h2>${cards(needs)}</section>` : ''}
+    ${rest.length ? `<section class="section"><h2>Open <span class="count">${rest.length}</span></h2>${cards(rest.map((o) => ({ o, t: null })))}</section>` : ''}
+    ${needs.length || rest.length ? '' : emptyBox(q ? 'No open orders match.' : 'No open orders. Delivered and cancelled ones are under Done.')}`;
+  } else {
+    const list = (tab === 'done' ? closed : all).filter(hit).slice(0, 60);
+    body = list.length ? cards(list.map((o) => ({ o, t: isOpenOrder(o) ? orderTodo(o) : null }))) : emptyBox(q ? 'No orders match.' : 'Nothing here yet.');
+  }
+  return `<header class="head"><div><h1>Orders</h1></div>
+    <div class="actions"><button class="btn primary" data-act="order-new">${ico('plus')}New order</button><a class="btn" href="#prices">${ico('calc')}Prices</a></div></header>
+  ${all.length ? `<div class="filters"><input class="input search" id="or-q" type="search" placeholder="Search buyer or order number" value="${esc(fo.q)}" data-filter="orders.q" aria-label="Search orders"></div>
+  ${seg('orders', tab, [['open', `Open ${open.length}`], ['done', `Done ${closed.length}`], ['all', `All ${all.length}`]])}` : ''}
   <div class="tiles">${tile(open.length, 'Open orders')}${tile(waitingPay, 'Waiting for payment')}${tile(toShip, 'Ready to ship')}${tile(all.filter((o) => o.status === 'delivered').length, 'Delivered')}</div>
-  ${all.length ? '' : emptyBox('No orders yet. When a buyer accepts a quote, tap <b>Make proforma</b> on it, or start one here.', `<button class="btn primary" data-act="order-new">${ico('receipt')}New proforma invoice</button>`)}
-  ${todo.length ? `<section class="section"><h2>Needs you <span class="count">${todo.length}</span></h2><div class="list">${todo.map(({ o, t }) => orderItem(o, t)).join('')}</div></section>` : ''}
-  ${rest.length ? `<section class="section"><h2>Open <span class="count">${rest.length}</span></h2><div class="list">${rest.map((o) => orderItem(o, null)).join('')}</div></section>` : ''}
-  ${done.length ? `<section class="section"><h2>Done <span class="count">${done.length}</span></h2><div class="list">${done.map((o) => orderItem(o, null)).join('')}</div></section>` : ''}`;
+  ${all.length ? body : emptyBox('No orders yet. When a buyer accepts a quote, tap <b>Make proforma</b> on it, or start one with <b>New order</b>.')}`;
 }
 function ordersPanel(b) {
   const list = ordersOf(b.id);
@@ -3069,7 +3117,7 @@ function orderDrawer(o) {
   return `<div class="drawer" role="dialog" aria-modal="true" aria-label="Proforma ${esc(o.number)}">
     <div class="layer-head"><div><div class="eyebrow">Proforma invoice · ${esc(by.name || (b && b.name) || '')}</div><h2>${esc(o.number)}</h2><div class="chips"><span class="chip ${ORDER_TONE[o.status] || ''}">${esc(ORDER_LABEL[o.status] || o.status)}</span>${o.emailedAt ? `<span class="chip">${ico('mail')}Emailed ${esc(fmtDay(String(o.emailedAt).slice(0, 10)))}</span>` : ''}</div></div>${closeBtn()}</div>
     ${track}
-    <div class="tiles">${tile(esc(fmtShort(total, cur)), 'Total')}${tile(esc(fmtShort(adv, cur)), `Advance, ${esc(pdfN(orderPct(o)))}%`)}${tile(esc(fmtShort(paid, cur)), 'Received')}${tile(esc(fmtShort(due, cur)), 'Still due')}</div>
+    <div class="tiles wide">${tile(esc(fmtShort(total, cur)), 'Total')}${tile(esc(fmtShort(adv, cur)), `Advance, ${esc(pdfN(orderPct(o)))}%`)}${tile(esc(fmtShort(paid, cur)), 'Received')}${tile(esc(fmtShort(due, cur)), 'Still due')}</div>
     <section class="panel"><h3>Next</h3><p style="margin:0">${lead}</p>${acts.length ? `<div class="actions">${acts.join('')}</div>` : ''}</section>
     ${payForm}${shipForm}${mailForm}${payments}${checklist}${items}
     <section class="panel"><h3>Details</h3><dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
@@ -3247,7 +3295,7 @@ function pricesView() {
     </section>
     <section class="panel"><h3>Price</h3>
       ${c.price ? `<dl class="ledger">${parts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(inr(v))}</dd>`).join('')}<dt class="tot">Cost</dt><dd class="tot">${esc(inr(c.cost))}</dd>${c.margin ? `<dt>Margin, ${Number(p.margin) || 0}%</dt><dd>${esc(inr(c.margin))}</dd>` : ''}${c.shipping ? `<dt>Shipping and insurance</dt><dd>${esc(inr(c.shipping))}</dd>` : ''}<dt class="tot">Wholesale price</dt><dd class="tot">${esc(inr(c.price))}</dd></dl>
-        ${fx.length ? `<div class="tiles">${fx.map(([k, v]) => tile(esc(fxFmt(k, v)), k)).join('')}</div>` : '<p class="hint">Add exchange rates above to see this price in pounds, dollars, euros and dirhams.</p>'}
+        ${fx.length ? `<div class="tiles wide">${fx.map(([k, v]) => tile(esc(fxFmt(k, v)), k)).join('')}</div>` : '<p class="hint">Add exchange rates above to see this price in pounds, dollars, euros and dirhams.</p>'}
         ${shop ? `<p class="hint">In a UK shop at a 2.5× mark-up plus 20% VAT, this sells for about £${shop.toLocaleString('en-GB')}.</p>` : ''}
         <div class="actions"><button class="btn small" data-act="pc-copy">${ico('copy')}Copy</button><button class="btn small" data-act="pc-save">${ico('check')}Save to price list</button><button class="btn small quiet" data-act="pc-reset">Clear</button></div>
         <div class="grid2"><div class="field"><label for="pc-buyer">Quote it to</label>${selectHtml('pc-buyer', 'data-pc="buyer"', buyers.map((x) => [x.id, `${x.name}${x.city ? ', ' + x.city : ''}`]), p.buyer || '', 'Choose a buyer')}</div><div class="field"><label for="pc-cur">In</label>${selectHtml('pc-cur', 'data-pc="cur"', curOpts, p.cur || curOpts[0][0])}</div></div>
@@ -3881,6 +3929,7 @@ async function onClick(e) {
       break;
     }
     case 'focus-open': S.form = {}; openLayer({ kind: 'focus' }); break;
+    case 'jump': { const t = document.getElementById(el.dataset.target); if (t) t.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); break; }
     case 'work-on': {
       const city = el.dataset.city || '';
       if (await setFocus({ country: el.dataset.country || '', city })) {
@@ -3937,6 +3986,7 @@ async function onClick(e) {
       if (g === 'vfout') S.form['vf.outcome'] = v;
       if (g === 'mailapp' && S.device) S.device.setMailApp(v);
       if (g === 'ptab') { S.filters.places.tab = v; S.ui.placesShown = SHOWN_STEP; }
+      if (g === 'orders') S.filters.orders.tab = v;
       render(); break;
     }
     case 'lead-stage': S.filters.leads.tab = 'all'; S.filters.leads.stage = el.dataset.val; render(); break;

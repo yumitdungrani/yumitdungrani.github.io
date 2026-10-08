@@ -9,7 +9,7 @@
 */
 (() => {
   'use strict';
-  const BUILD = '1dc421bba2';
+  const BUILD = '7eac805a56';
   const CFG = window.OUTREACH_CONFIG || {};
   const BASE = String(CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const KEY = String(CFG.SUPABASE_KEY || '');
