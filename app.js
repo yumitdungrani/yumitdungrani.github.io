@@ -365,7 +365,7 @@ const chLabel = (c) => `<span class="ch">${chIco(c)}${esc(CH_LABEL[c] || c || ''
 /* ================= state ================= */
 const S = {
   mode: 'loading',
-  loaded: { campaigns: false, businesses: false, settings: false, places: false },
+  loaded: { campaigns: false, businesses: false, settings: false, places: false, research: false },
   campaigns: new Map(),
   businesses: new Map(),
   quotes: new Map(),
@@ -2012,8 +2012,15 @@ async function afterScan(key, again) {
   const ids = showroomReport(doc).ind.filter((x) => !x.b && !x.s.closed).map((x) => x.s.id);
   const n = ids.length ? await addShops(key, ids) : 0;
   const now = nowIso();
-  if (again || !researchOf(key)) await write(() => Data.set('research', key, { city: doc.city, country: doc.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false }));
+  if (again || (S.loaded.research && !researchOf(key))) await write(() => Data.set('research', key, { city: doc.city, country: doc.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false }));
   return n;
+}
+// Choosing a city that was searched before (and has no research yet): its showrooms go to Leads and Claude's
+// research starts, the same as right after a search.
+function startCityResearch(country, city) {
+  const k = placeKey(country, city);
+  if (!city || !canFind() || !S.places.get(k) || !S.loaded.research || researchOf(k)) return;
+  afterScan(k, false).then((n) => { if (researchOf(k)) toast(n ? `Working on ${city}: ${n} ${n === 1 ? 'showroom' : 'showrooms'} saved to Leads. Claude is finding their details.` : `Working on ${city}. Claude is finding the showrooms' details.`); });
 }
 // New findings fill the empty details of shops already on your list; nothing you typed is overwritten.
 let researchTimer = 0;
@@ -2059,7 +2066,8 @@ function researchPanel(key, r) {
   const online = r.online.length ? `, and found ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'}` : '';
   if (!st) {
     if (!canFind()) return '';
-    return `<section class="panel research">${head}<p class="muted" style="margin:0">Claude finds each independent showroom's website, email, Instagram and owner, and in the UK its company type, and looks for jewellers here that sell online. About ${RESEARCH_BATCH} shops an hour, in the background.</p><div class="actions"><button type="button" class="btn primary" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
+    const unsaved = r.ind.filter((x) => !x.b && !x.s.closed).length;
+    return `<section class="panel research">${head}<p class="muted" style="margin:0">${unsaved ? `The ${unsaved} independent ${unsaved === 1 ? 'showroom goes' : 'showrooms go'} to Leads, and Claude` : 'Claude'} finds each one's website, email, Instagram and owner, and in the UK its company type, and looks for jewellers here that sell online. About ${RESEARCH_BATCH} shops an hour, in the background.</p><div class="actions"><button type="button" class="btn primary" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
   }
   if (st === 'done') {
     const n = (f) => r.ind.filter((x) => x.s.checked && f(x.s)).length; const em = n((s) => s.email), web = n((s) => s.website), lf = n((s) => s.legalForm);
@@ -4334,14 +4342,21 @@ async function onClick(e) {
       if (await setFocus({ country: el.dataset.country || '', city })) {
         if (S.layer && S.layer.kind === 'focus') { S.layer = null; S.form = {}; }
         if (city && location.hash !== '#showrooms') location.hash = '#showrooms'; else render();
+        startCityResearch(el.dataset.country || '', city);
       }
       break;
     }
     case 'find-stop': if (S.find.ctl) S.find.ctl.abort(); break;
-    case 'research-start': case 'research-again': {
-      const k = el.dataset.key; const d = S.places.get(k); if (!d) break; const cur = researchOf(k); const now = nowIso();
-      const doc = { city: d.city, country: d.country, status: 'queued', requestedAt: now, updatedAt: now, results: act === 'research-again' || !cur ? {} : cur.results || {} };
-      if (await write(() => Data.set('research', k, doc))) toast(`Claude will start on ${d.city} within the hour`);
+    case 'research-start': {
+      const k = el.dataset.key; const d = S.places.get(k); if (!d) break;
+      if (!S.loaded.research) { toast('Still loading. Try again in a moment.'); break; }
+      const n = await afterScan(k, false);
+      if (researchOf(k)) toast(n ? `${n} ${n === 1 ? 'showroom' : 'showrooms'} saved to Leads. Claude starts on ${d.city} within the hour.` : `Claude will start on ${d.city} within the hour`);
+      break;
+    }
+    case 'research-again': {
+      const k = el.dataset.key; const d = S.places.get(k); if (!d) break; const now = nowIso();
+      if (await write(() => Data.set('research', k, { city: d.city, country: d.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false }))) toast(`Claude will check every shop in ${d.city} again, starting within the hour`);
       break;
     }
     case 'research-stop': if (await write(() => Data.update('research', el.dataset.key, { status: 'stopped', updatedAt: nowIso() }))) toast('Stopped. What Claude found so far stays.'); break;
@@ -4948,7 +4963,7 @@ async function onSubmit(e) {
     const city = String(fv('oc.city')).replace(/\s+/g, ' ').trim(); const country = form.dataset.country || focusNow().country;
     if (!city) { toast('Type the name of a city.'); return; }
     const known = cityOptions(country).find((c) => placeText(c) === placeText(city)) || city.replace(/\b\p{Ll}/gu, (m) => m.toUpperCase());
-    if (await setFocus({ country, city: known })) { delete S.form['oc.city']; if (S.layer && S.layer.kind === 'focus') { S.layer = null; S.form = {}; } if (location.hash !== '#showrooms') location.hash = '#showrooms'; else render(); }
+    if (await setFocus({ country, city: known })) { delete S.form['oc.city']; if (S.layer && S.layer.kind === 'focus') { S.layer = null; S.form = {}; } if (location.hash !== '#showrooms') location.hash = '#showrooms'; else render(); startCityResearch(country, known); }
     return;
   }
   if (kind === 'campaign' && S.layer && S.layer.id) {
@@ -5132,7 +5147,7 @@ async function init() {
   S.ai.sample = sample || null; S.downloads = downloads || null; S.device = device || null;
   if (sample && typeof sample.limits === 'function') { try { const lim = await sample.limits(); S.ai.images = lim && lim.images ? lim.images : null; } catch { S.ai.images = null; } }
   if (db) { DB = db; S.mode = 'db'; subscribe(); loadTeam(); }
-  else { S.mode = 'local'; S.loaded = { campaigns: true, businesses: true, settings: true, places: true }; }
+  else { S.mode = 'local'; S.loaded = { campaigns: true, businesses: true, settings: true, places: true, research: true }; }
   schedule();
   initGmail(await mcpReady).then(async () => {
     S.perm = await use('permissions');
@@ -5140,6 +5155,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { S, Data, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, afterScan, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
+window.__facet = { S, Data, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
 init();
 })();
