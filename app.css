@@ -53,7 +53,6 @@ div.app{min-height:100%}
 .names{display:flex;flex:1;flex-direction:column;min-width:0}
 .names small{font-size:11px;font-weight:700;line-height:1.25;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.74)}
 .names .page{overflow:hidden;font-size:19px;font-weight:800;line-height:1.25;white-space:nowrap;text-overflow:ellipsis}
-.focus-top{display:contents}
 .badge{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--bad);color:var(--on-bad);font-size:12px;font-weight:800;line-height:20px;text-align:center;font-variant-numeric:tabular-nums}
 .main{min-width:0;padding-block:18px calc(98px + env(safe-area-inset-bottom,0px));padding-inline:16px}
 .wrap{max-width:var(--col);margin:0 auto;display:flex;flex-direction:column;gap:18px;container-type:inline-size}
@@ -71,7 +70,7 @@ div.app{min-height:100%}
 .head h1,.loading h1{margin:0;font-size:26px;font-weight:800;line-height:1.15;letter-spacing:-.015em;color:var(--ink)}
 .head h1.same{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .head p{margin:6px 0 0;max-width:62ch;color:var(--ink-2)}
-.head h1.same+p{margin-top:0}
+.head h1:is(.same,.sr-only)+p{margin-top:0}
 .eyebrow{margin-bottom:4px;font-size:14px;font-weight:600;color:var(--ink-3)}
 .eyebrow a{color:inherit;text-decoration-color:var(--line)}
 .eyebrow a:hover{color:var(--accent);text-decoration-color:currentColor}
@@ -396,12 +395,16 @@ input.search:focus{border-color:var(--accent)}
 .loading h1{color:var(--ink)}
 .loading p{margin:0}
 
-/* where you're working: a pill on the right of the bar */
-.focus-btn{display:inline-flex;flex:none;align-items:center;gap:7px;min-width:0;max-width:46%;min-height:40px;padding:0 12px 0 11px;border:1px solid rgba(255,255,255,.3);border-radius:999px;background:rgba(255,255,255,.12);color:var(--on-bar);font-size:14px;font-weight:700}
-.focus-btn:hover{background:rgba(255,255,255,.2)}
-.focus-btn>.svg:first-child{color:var(--gold-on-bar)}
-.focus-btn>.svg:last-child{width:14px;height:14px;color:rgba(255,255,255,.8)}
-.focus-btn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* where you're working: the box at the top of Showrooms, the one place to change it */
+.place-select{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:10px 16px;border:0;border-radius:14px;background:var(--surface);box-shadow:var(--card);color:var(--ink);font:inherit;text-align:left}
+.place-select:hover{box-shadow:0 0 0 2px var(--accent-soft),var(--card)}
+.place-select>.svg{width:22px;height:22px;color:var(--accent)}
+.place-select .what{display:flex;flex:1;flex-direction:column;min-width:0}
+.place-select small{font-size:12.5px;font-weight:700;line-height:1.3;color:var(--ink-3)}
+.place-select b{font-size:18px;font-weight:800;line-height:1.3;overflow-wrap:anywhere;text-wrap:balance}
+.place-select b span{font-weight:600;color:var(--ink-2)}
+.place-select .change{display:inline-flex;flex:none;align-items:center;gap:4px;font-size:15px;font-weight:700;color:var(--accent)}
+.place-select .change .svg{width:16px;height:16px;stroke-width:2.2}
 
 /* ⋯ keeps each row to one clear button */
 .btn.dots{width:44px;padding:0}

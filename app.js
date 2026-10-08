@@ -2238,7 +2238,7 @@ function renderNav() {
   const cur = S.route.view === 'city' ? 'cities' : S.route.view === 'trip' ? 'trips' : S.route.view;
   const link = ([k, label, i, n]) => `<a href="#${k}" ${cur === k ? 'aria-current="page"' : ''}>${ico(i)}<span>${label}</span>${n ? `<span class="badge" aria-label="${n} waiting">${n}</span>` : ''}</a>`;
   const byKey = Object.fromEntries(items.map((x) => [x[0], x]));
-  setShell('page-title', esc(pageTitle())); setShell('focus-top', focusPill());
+  setShell('page-title', esc(pageTitle()));
   setShell('tabbar', TAB_VIEWS.map((k) => link(byKey[k])).join('') + `<button type="button" id="tab-more" data-act="more" aria-haspopup="dialog" aria-controls="more" ${MORE_VIEWS.includes(cur) ? 'aria-current="page"' : ''}>${MORE_ICON}<span>More</span></button>`);
   const more = $('#tab-more'); if (more) more.setAttribute('aria-expanded', String(moreOpen()));
   setShell('more-nav', MORE_VIEWS.map((k) => link(byKey[k])).join(''));
@@ -2290,11 +2290,19 @@ function moreMenu(key, buttons) {
   const open = S.ui.menu === key;
   return `<button type="button" class="btn small quiet dots" data-act="menu" data-key="${esc(key)}" aria-expanded="${open}" aria-label="More actions">${MORE_ICON}</button>${open ? `<div class="menu-acts" role="group" aria-label="More actions">${buttons}</div>` : ''}`;
 }
-const SHORT_PLACE = { 'United Kingdom': 'UK', 'United States': 'USA', 'United Arab Emirates': 'UAE' };
-function focusPill() { const n = focusName(); const short = SHORT_PLACE[n] || n; return `<button type="button" class="focus-btn" data-act="focus-open" aria-label="Working on ${esc(n)}. Change">${ico('pin')}<span>${esc(short)}</span>${ico('chev')}</button>`; }
+function placeSelect() {
+  const f = focusNow(); const main = f.city || (f.country ? `All of ${f.country}` : 'Everywhere');
+  const label = f.city ? `${f.city}, ${f.country}` : main;
+  return `<button type="button" class="place-select" data-act="focus-open" aria-label="Working on ${esc(label)}. Change">${ico('pin')}<span class="what"><small>Working on</small><b>${esc(main)}${f.city ? `<span>, ${esc(f.country)}</span>` : ''}</b></span><span class="change">Change${ico('chev')}</span></button>`;
+}
 function confirmBtn(key, label, armedLabel, act, extra = '') {
   const armed = S.confirmKey === key;
   return `<button type="button" class="btn small ${armed ? 'armed' : 'danger quiet'}" data-act="${act}" data-key="${esc(key)}" ${extra}>${armed ? armedLabel : label}</button>`;
+}
+// One line on a page that leaves out other places, so nothing seems lost.
+function elsewhereHint(n, one, many) {
+  if (!n) return '';
+  return `<p class="hint">Showing ${esc(focusName())}. ${n} more ${n === 1 ? `${one} is` : `${many} are`} elsewhere. <a href="#showrooms">Change the city in Showrooms</a>.</p>`;
 }
 function notConnectedBanner() {
   if (phoneMail()) return `<div class="banner">${ico('mail')}<p><b>Emails open in your ${mailAppName() === 'Gmail' ? 'Gmail' : 'mail'} app.</b> Send each one there, then mark it sent. WhatsApp, Instagram and LinkedIn steps stay as tasks for you to do and mark done. <a href="#connections">Connections</a></p></div>`;
@@ -2494,7 +2502,7 @@ function citiesView() {
   return `<header class="head"><div><h1>Campaigns</h1><p>A city campaign targets the jewellers in one city. A fair campaign collects the people you meet at a trade fair. You approve who gets contacted, then the follow-up runs.</p></div>
     <div class="actions"><button class="btn primary" data-act="new-campaign">${ico('plus')}New city campaign</button>${moreMenu('camps', `<button class="btn small" data-act="new-fair">${ico('calendar')}New fair campaign</button>`)}</div></header>
   ${howItWorks()}
-  ${hidden ? `<p class="hint">Showing ${esc(focusName(f))}. ${hidden} more ${hidden === 1 ? 'campaign is' : 'campaigns are'} elsewhere: <button type="button" class="linkish" data-act="focus-open">change where you're working</button>.</p>` : ''}
+  ${elsewhereHint(hidden, 'campaign', 'campaigns')}
   ${camps.length ? `<div class="table-wrap"><table><thead><tr><th>Campaign</th><th>Stage</th><th class="num">Found</th><th class="num">Approved</th><th class="num">In sequence</th><th class="num">Replies</th><th class="num">Orders</th></tr></thead><tbody>
     ${camps.map((c) => { const n = campCounts(c); const ph = campaignPhase(c); return `<tr class="click" data-act="go" data-href="#city-${esc(c.id)}"><td><a href="#city-${esc(c.id)}" class="linkish">${esc(title(c))}</a> ${c.kind === 'fair' ? '<span class="chip gold">Fair</span>' : ''} ${c.isExample ? '<span class="chip example">Example</span>' : ''}<div class="sub">${c.kind === 'fair' ? `${esc(fmtRange(c.startDate, c.endDate))} · ${esc(c.city)}, ` : ''}${esc(c.country)}</div></td><td><span class="chip ${ph.tone}">${ph.label}</span></td><td class="num">${n.found}</td><td class="num">${n.approved}</td><td class="num">${n.active}</td><td class="num">${n.replied}</td><td class="num">${n.orders}</td></tr>`; }).join('')}
   </tbody></table></div>` : emptyBox('No campaigns yet. Start with one of your test cities, such as London or Dubai, or a fair you are going to.', `<button class="btn primary" data-act="new-campaign">${ico('plus')}New city campaign</button>`)}`;
@@ -2607,16 +2615,21 @@ function cityButtons(country, small) {
   }).join('')}</div>
   <form class="inline-form" data-form="work-city" data-country="${esc(country)}"><div class="field"><label for="oc-city-${small ? 'm' : 'p'}">Another city</label><input class="input" id="oc-city-${small ? 'm' : 'p'}" data-k="oc.city" value="${esc(fv('oc.city'))}" placeholder="e.g. Leicester" autocomplete="off"></div><button type="submit" class="btn">${small ? 'Work on it' : 'Find showrooms'}</button></form>`;
 }
+function countryButtons() {
+  const n = (c) => allBiz().filter((b) => placeText(b.country) === placeText(c)).length;
+  const list = focusCountries().map((c) => [c, n(c)]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return `<div class="cities">${list.map(([c, k]) => `<button type="button" class="city-btn" data-act="work-on" data-country="${esc(c)}" data-city=""><b>${esc(c)}</b><span class="sub">${k ? `${k} ${k === 1 ? 'buyer' : 'buyers'}` : 'No buyers yet'}</span></button>`).join('')}</div>`;
+}
 function showroomsView() {
-  const f = focusNow();
-  if (!f.country) return `<header class="head"><div><div class="eyebrow">Showrooms</div><h1>Choose a country</h1><p>Pick where you're working, then a city. The app finds every jewellery showroom there, shows them on a map and makes a short report.</p></div><div class="actions"><button class="btn primary" data-act="focus-open">${ico('pin')}Choose where</button></div></header>`;
-  if (!f.city) return `<header class="head"><div><div class="eyebrow">Showrooms · ${esc(f.country)}</div><h1>Choose a city</h1><p>The app finds every jewellery showroom in the city you pick, shows them on a map and makes a short report. The rest of the app then works on that city.</p></div></header>${cityButtons(f.country, false)}`;
+  const f = focusNow(); const pick = placeSelect();
+  if (!f.country) return `${pick}<header class="head"><div><h1>Choose a country</h1><p>Pick a country, then a city. The app finds every jewellery showroom there, shows them on a map and makes a short report.</p></div></header>${countryButtons()}`;
+  if (!f.city) return `${pick}<header class="head"><div><h1>Choose a city</h1><p>The app finds every jewellery showroom in the city you pick, shows them on a map and makes a short report. The rest of the app then works on that city.</p></div></header>${cityButtons(f.country, false)}`;
   const key = placeKey(f.country, f.city); const doc = S.places.get(key); const busy = S.find.busy && S.find.key === key;
-  const head = (p, actions = '') => `<header class="head"><div><div class="eyebrow">Showrooms · ${esc(f.country)}</div><h1>${esc(f.city)}</h1>${p}</div>${actions}</header>`;
+  const head = (p, actions = '') => `${pick}<header class="head"><div><h1 class="sr-only">Showrooms in ${esc(f.city)}</h1>${p}</div>${actions}</header>`;
   if (!doc) {
     if (!canFind()) return head(`<p>Finding showrooms works in the Ark Diamond app on your phone, at <a href="${MOVED_TO}" target="_blank" rel="noopener">yumitdungrani.github.io</a>.</p>`);
-    if (!busy && S.find.error && S.find.key === key) return head(`<p>${esc(S.find.error)}</p>`, `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Try again</button><button class="btn" data-act="focus-open">Another city</button></div>`);
-    if (!busy && S.find.stopped && S.find.key === key) return head('<p>Search stopped. Nothing was saved.</p>', `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Search again</button><button class="btn" data-act="focus-open">Another city</button></div>`);
+    if (!busy && S.find.error && S.find.key === key) return head(`<p>${esc(S.find.error)}</p>`, `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Try again</button></div>`);
+    if (!busy && S.find.stopped && S.find.key === key) return head('<p>Search stopped. Nothing was saved.</p>', `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Search again</button></div>`);
     autoFind(f);
     return head('<p>Every jewellery showroom in the city, on a map, with a short report.</p>') + `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(busy ? S.find.step : `Looking for showrooms in ${f.city}`)}…</b><br><span class="sub">This takes a few seconds, longer for London.</span></p>${busy ? `<button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button>` : ''}</div>`;
   }
@@ -2629,13 +2642,13 @@ function showroomsView() {
   const areas = r.areas.slice(0, 8); const amax = Math.max(1, ...areas.map((a) => a.n));
   const fetched = String(doc.fetchedAt || '').slice(0, 10);
   return head(`<p>${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}.</p>`,
-    `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button><button class="btn" data-act="focus-open">${ico('pin')}Change city</button>${moreMenu('places', `<button class="btn small" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Searching…' : 'Search again'}</button>`)}</div>`) + `
+    `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button>${moreMenu('places', `<button class="btn small" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Searching…' : 'Search again'}</button>`)}</div>`) + `
   <div class="tiles">${tile(r.total, 'Showrooms')}${tile(r.ind.length, 'Independent')}${tile(r.chains.length, 'Chains')}${tile(r.mine.length, 'Your buyers')}</div>
   ${busy ? `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(S.find.step)}…</b></p><button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button></div>` : ''}
   ${researchPanel(key, r)}
   ${r.total ? `<section class="section map-section"><div class="mapbox" id="map-slot" data-key="${esc(key)}"></div>
     <div class="legend" aria-hidden="true"><span><i class="ind"></i>Independent</span><span><i class="chain"></i>Chain</span><span><i class="mine"></i>Your buyer</span></div>
-    ${sel ? `<div class="list picked">${shopItem(sel, doc, key, true)}</div>` : '<p class="hint">Tap a dot to see the shop.</p>'}</section>` : emptyBox(`OpenStreetMap has no jewellery showrooms in ${esc(doc.city)}. Try a nearby larger town, or ask Claude to search the high street.`, `<button class="btn" data-act="focus-open">Another city</button>`)}
+    ${sel ? `<div class="list picked">${shopItem(sel, doc, key, true)}</div>` : '<p class="hint">Tap a dot to see the shop.</p>'}</section>` : emptyBox(`OpenStreetMap has no jewellery showrooms in ${esc(doc.city)}. Try a nearby larger town, or ask Claude to search the high street.`, `<button class="btn" data-act="focus-open">${ico('pin')}Change city</button>`)}
   ${areas.length > 1 ? `<section class="section"><h2>Where they are</h2>${barRows(areas.map((a, i) => ({ name: a.label, share: a.n / amax, top: i === 0, val: `<b>${a.n}</b>` })))}<p class="hint">${placeText(doc.country) === placeText(UK) ? 'By postcode district, with the area most of them name.' : 'By area.'} The busiest streets make the best visit days.</p></section>` : ''}
   ${r.total ? `<section class="section"><div class="sec-head"><h2>The shops</h2>${seg('ptab', tab, [['ind', `Independent ${r.ind.length}`], ['chain', `Chains ${r.chains.length}`], ['mine', `Your buyers ${r.mine.length}`]])}</div>
     ${tab === 'ind' && toAdd.length ? `<div class="bulk"><span>${toAdd.length} independent ${toAdd.length === 1 ? 'showroom isn\'t' : 'showrooms aren\'t'} on your list yet.</span><button class="btn small primary" data-act="places-add-all" data-key="${esc(key)}">${ico('plus')}Add all ${toAdd.length}</button></div>` : ''}
@@ -2717,6 +2730,7 @@ function leadsView() {
   ${openQuotes.length || samplesOut ? `<p class="muted" style="margin:0">${openQuotes.length ? `<b>${openQuotes.length}</b> open ${openQuotes.length === 1 ? 'quote' : 'quotes'}${pipeline ? ` worth <b>${money(pipeline)}</b>` : ''}` : ''}${openQuotes.length && samplesOut ? ' · ' : ''}${samplesOut ? `<b>${samplesOut}</b> sample ${samplesOut === 1 ? 'parcel' : 'parcels'} out` : ''}</p>` : ''}
   <div class="sec-head">${seg('leads', f.tab, [['needs', `Needs reply (${needs.length})`], ['snoozed', `Snoozed (${snoozed.length})`], ['all', `All leads (${leads.length})`]])}
     ${f.tab === 'all' ? selectHtml('f-stage', 'data-filter="leads.stage" aria-label="Stage"', STAGES, f.stage, 'Every stage') : ''}</div>
+  ${elsewhereHint(allBiz().filter((b) => b.lead && !inFocus(b, fo)).length, 'lead', 'leads')}
   ${list.length ? `<div class="list">${list.map(leadItem).join('')}</div>` : emptyBox(f.tab === 'needs' ? 'Every reply has an answer. New replies show up here.' : leads.length ? 'No leads in this group.' : 'No leads yet. When a buyer replies, use <b>Log a reply</b> and they appear here.')}`;
 }
 function leadItem(b) {
@@ -3044,6 +3058,7 @@ function ordersView() {
   ${all.length ? `<div class="filters"><input class="input search" id="or-q" type="search" placeholder="Search buyer or order number" value="${esc(fo.q)}" data-filter="orders.q" aria-label="Search orders"></div>
   ${seg('orders', tab, [['open', `Open ${open.length}`], ['done', `Done ${closed.length}`], ['all', `All ${all.length}`]])}` : ''}
   <div class="tiles">${tile(open.length, 'Open orders')}${tile(waitingPay, 'Waiting for payment')}${tile(toShip, 'Ready to ship')}${tile(all.filter((o) => o.status === 'delivered').length, 'Delivered')}</div>
+  ${elsewhereHint([...S.orders.values()].filter((o) => !orderInFocus(o)).length, 'order', 'orders')}
   ${all.length ? body : emptyBox('No orders yet. When a buyer accepts a quote, tap <b>Make proforma</b> on it, or start one with <b>New order</b>.')}`;
 }
 function ordersPanel(b) {
