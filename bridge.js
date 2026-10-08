@@ -9,7 +9,7 @@
 */
 (() => {
   'use strict';
-  const BUILD = '357c02a67f';
+  const BUILD = '9b7fa2cc69';
   const CFG = window.OUTREACH_CONFIG || {};
   const BASE = String(CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const KEY = String(CFG.SUPABASE_KEY || '');
@@ -87,6 +87,7 @@
     const code = String((data && data.code) || ''); const message = String((data && (data.message || data.msg || data.error)) || '');
     if (code === 'P0002') return { code: 'invalid_argument', message };
     if (code === '53400') return { code: 'quota_exceeded', message };
+    if (code === 'PGRST202' || (status === 404 && /function/i.test(message))) return { code: 'missing_function', message };
     if (status === 429) return { code: 'resource_exhausted', message };
     if (status === 401 || status === 403 || code === '42501') return { code: 'not_granted', message };
     if (status >= 500) return { code: 'unavailable', message };
@@ -221,9 +222,41 @@
       onSnapshot: (next, error) => listen(docSubs, coll + '/' + id, coll, next, error),
     };
   }
+  // Many records in one call (a city's showrooms, a campaign for hundreds of shops). Where the database
+  // doesn't have the bulk functions yet, the same changes go one by one.
+  let bulk = true;
+  async function many(coll, items, fn, one, local) {
+    const keys = items.map(([id]) => coll + '/' + id);
+    for (const k of keys) inFlight.set(k, (inFlight.get(k) || 0) + 1);
+    local(); changed(coll);
+    try {
+      for (let i = 0; i < items.length; i += 200) {
+        const part = items.slice(i, i + 200);
+        if (bulk) {
+          try { await rpc(fn, { p_coll: coll, p_items: part.map(one) }); continue; }
+          catch (e) { if (!(e && e.code === 'missing_function')) throw e; bulk = false; }
+        }
+        for (const it of part) {
+          const x = one(it);
+          if (x.data !== undefined) await rpc('outreach_set', { p_coll: coll, p_id: x.id, p_data: x.data });
+          else { try { await rpc('outreach_update', { p_coll: coll, p_id: x.id, p_patch: x.patch }); } catch (e) { if (!(e && e.code === 'invalid_argument')) throw e; } }
+        }
+      }
+    } catch (e) {
+      load(coll, true).catch(() => {});
+      throw e;
+    } finally {
+      for (const k of keys) { const n = (inFlight.get(k) || 1) - 1; if (n > 0) inFlight.set(k, n); else inFlight.delete(k); }
+    }
+  }
   const dbApi = {
     collection: (coll) => ({ doc: (id) => docRef(coll, id || newId()), onSnapshot: (next, error) => listen(listSubs, coll, coll, next, error) }),
     doc: (p) => { const i = String(p).indexOf('/'); return docRef(String(p).slice(0, i), String(p).slice(i + 1)); },
+    setMany: (coll, items) => many(coll, items, 'outreach_set_many', ([id, data]) => ({ id, data }), () => { const m = mapFor(coll); for (const [id, data] of items) m.set(id, clone(data)); }),
+    updateMany: (coll, items) => {
+      const m = mapFor(coll); const have = items.filter(([id]) => !loaded.has(coll) || m.has(id));
+      return many(coll, have, 'outreach_update_many', ([id, patch]) => ({ id, patch }), () => { for (const [id, patch] of have) if (m.has(id)) m.set(id, deepMerge(m.get(id), patch)); });
+    },
   };
 
   // Changes from your other devices (and from Claude's background checks): a quick look every minute while
@@ -304,6 +337,11 @@
     },
     share: (opts) => share(opts, true),
     signOut,
+    // the team: everyone with their own login to this app; only the owner adds or removes people
+    me: () => (session && session.user ? { id: session.user.id, email: session.user.email } : null),
+    team: async () => { try { const rows = await rpc('outreach_team'); return { ok: true, members: Array.isArray(rows) ? rows : [] }; } catch (e) { return { ok: false, code: (e && e.code) || 'unknown', members: [] }; } },
+    addMember: async (name, email, password) => { try { return await rpc('outreach_add_member', { p_name: name, p_email: email, p_password: password }); } catch (e) { return (e && e.code) || 'unknown'; } },
+    removeMember: async (userId) => { try { return await rpc('outreach_remove_member', { p_user: userId }); } catch (e) { return (e && e.code) || 'unknown'; } },
   };
 
   window.claude = { use: async (name) => (name === 'db' && signedIn ? dbApi : name === 'downloads' ? downloads : name === 'device' && signedIn ? device : null) };

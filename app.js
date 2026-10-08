@@ -60,20 +60,26 @@ const DEFAULT_SEQUENCE = [
   { id: 's0', day: 0, channel: 'email', by: 'app', title: 'Intro and catalogue',
     subject: 'Lab-grown diamond jewellery for {{business}}',
     body: "Hello {{contact}},\n\nI'm {{sender}} from {{company}}. We manufacture jewellery set with CVD lab-grown diamonds in India: {{products}}.\n\nHere is our catalogue for jewellers in {{city}}: {{catalogue_link}}\n\nPrefer WhatsApp? Message us here: {{whatsapp_link}}\n\nBest regards,\n{{sender}}\n{{company}}" },
-  { id: 's1', day: 1, channel: 'email', by: 'app', title: 'Price list',
+  { id: 's3', day: 1, channel: 'instagram', by: 'you', title: 'Follow, like two posts, then DM the catalogue', subject: '',
+    body: "Hi! We're {{company}}, lab-grown diamond jewellery makers from India. We emailed you our catalogue, and here it is too: {{catalogue_link}}" },
+  { id: 's1', day: 2, channel: 'email', by: 'app', title: 'Price list',
     subject: 'Wholesale prices for {{business}}',
-    body: "Hello {{contact}},\n\nFollowing my note yesterday, here is our wholesale price list for {{country}}, with minimum order and delivery times: {{price_list_link}}\n\nWe can also arrange samples so you can check the quality first.\n\nBest regards,\n{{sender}}" },
-  { id: 's2', day: 3, channel: 'whatsapp', by: 'app', title: 'WhatsApp if they opted in, otherwise a call', subject: '',
+    body: "Hello {{contact}},\n\nFollowing my email with our catalogue, here is our wholesale price list for {{country}}, with minimum order and delivery times: {{price_list_link}}\n\nWe can also arrange samples so you can check the quality first.\n\nBest regards,\n{{sender}}" },
+  { id: 's5', day: 2, channel: 'linkedin', by: 'you', title: 'Connection note to the owner or buyer', subject: '',
+    body: 'Hello {{contact}}, I make lab-grown diamond jewellery in India and work with jewellers in {{country}}. Happy to connect.' },
+  { id: 's2', day: 4, channel: 'whatsapp', by: 'app', title: 'Catalogue on WhatsApp, or a call', subject: '',
     body: 'Hello {{contact}}, this is {{sender}} from {{company}}. Sharing our lab-grown diamond jewellery catalogue: {{catalogue_link}} Would you like prices for any pieces?',
     alt: 'Call {{business}} during shop hours. Introduce {{company}}, ask whether our catalogue and prices arrived, and offer samples.' },
-  { id: 's3', day: 4, channel: 'instagram', by: 'you', title: 'Follow, like two posts, then send a DM', subject: '',
-    body: "Hi! We're {{company}}, lab-grown diamond jewellery makers from India. We emailed you our catalogue, and I'm happy to share it here too: {{catalogue_link}}" },
-  { id: 's4', day: 6, channel: 'email', by: 'app', title: 'Bestsellers and first-order offer',
+  { id: 's7', day: 5, channel: 'instagram', by: 'you', title: 'DM the price list', subject: '',
+    body: 'Hello again! Our wholesale prices for {{country}} are here: {{price_list_link}} Happy to send a few samples so you can see the quality.' },
+  { id: 's8', day: 6, channel: 'whatsapp', by: 'app', optinOnly: true, title: 'Prices on WhatsApp (shops that opted in)', subject: '',
+    body: 'Hello {{contact}}, here are our wholesale prices for {{country}}: {{price_list_link}} We can send a few sample pieces first if that helps. {{sender}}, {{company}}' },
+  { id: 's4', day: 7, channel: 'email', by: 'app', title: 'Bestsellers and first-order offer',
     subject: 'Five bestsellers for {{business}}',
     body: "Hello {{contact}},\n\nHere are five of our best-selling lab-grown diamond pieces, with prices for {{country}}: {{catalogue_link}}\n\nFor a first order we can send a sample set so you can see the quality before you commit.\n\nBest regards,\n{{sender}}" },
-  { id: 's5', day: 8, channel: 'linkedin', by: 'you', title: 'Connection note to the owner or buyer', subject: '',
-    body: 'Hello {{contact}}, I make lab-grown diamond jewellery in India and work with jewellers in {{country}}. Happy to connect.' },
-  { id: 's6', day: 11, channel: 'email', by: 'app', title: 'Last note',
+  { id: 's9', day: 8, channel: 'linkedin', by: 'you', title: 'Message with the catalogue', subject: '',
+    body: 'Thanks for connecting, {{contact}}. Here is our lab-grown diamond jewellery catalogue for jewellers in {{country}}: {{catalogue_link}} Samples are possible before a first order.' },
+  { id: 's6', day: 10, channel: 'email', by: 'app', title: 'Last note',
     subject: 'Shall I close your file?',
     body: "Hello {{contact}},\n\nI haven't heard back, so I'll assume now isn't the right time. If you'd like our catalogue or prices later, just reply to this email.\n\nBest regards,\n{{sender}}" },
 ];
@@ -242,8 +248,8 @@ const CHAIN_NAMES = /^(the )?(pandora|goldsmiths|h\.? ?samuel|ernest jones|beave
 const SHARED_HOSTS = /(^|\.)(facebook\.com|instagram\.com|linktr\.ee|google\.com|wixsite\.com|business\.site|square\.site|etsy\.com|ebay\.co\.uk|ebay\.com|amazon\.co\.uk|yell\.com|tiktok\.com|x\.com|twitter\.com)$/;
 const SHOWN_STEP = 40;
 // Claude's background look-ups: how often its scheduled check runs, and how many shops it does each time
-const RESEARCH_EVERY_H = 3;
-const RESEARCH_BATCH = 15;
+const RESEARCH_EVERY_H = 1;
+const RESEARCH_BATCH = 30;
 const RESEARCH_KEYS = ['website', 'email', 'phone', 'instagram', 'facebook', 'person'];
 const VISIT_OUTCOMES = [['interested', 'Interested'], ['samples', 'Wants samples'], ['not_now', 'Not now'], ['no', 'Not interested']];
 const VISIT_LABEL = Object.fromEntries(VISIT_OUTCOMES);
@@ -256,7 +262,7 @@ const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.2/qr
 const DEFAULT_SETTINGS = {
   company: { name: '', senderName: '', senderEmail: '', whatsapp: '', website: '', address: '' },
   links: { catalogue: '', priceList: '' },
-  sending: { dailyCap: 40 },
+  sending: { dailyCap: 25 },
   sequence: DEFAULT_SEQUENCE,
   sequences: { fair: DEFAULT_FAIR_SEQUENCE, retry: DEFAULT_RETRY_SEQUENCE },
   rules: DEFAULT_RULES,
@@ -266,13 +272,13 @@ const DEFAULT_SETTINGS = {
   pricing: DEFAULT_PRICING,
 };
 const CONNECTIONS = [
-  { key: 'email', name: 'Email sending', icon: 'mail', does: (days) => `Sends the ${days.email || 'sequence'} emails by itself and pulls replies into Leads.`, needs: ['A business email account (Gmail or Outlook)', 'Your domain with SPF, DKIM and DMARC set up', 'A daily sending limit'] },
-  { key: 'whatsapp', name: 'WhatsApp Business Platform', icon: 'bubble', does: (days) => `Sends the ${days.whatsapp || 'WhatsApp'} message to buyers who opted in and brings their replies into Leads.`, needs: ['A verified Meta business account', 'The number buyers should see', 'Approved message templates'] },
-  { key: 'instagram', name: 'Instagram', icon: 'camera', does: 'Brings DMs that buyers send you into Leads. Cold DMs stay a task for you, as Instagram bans automated ones.', needs: ['An Instagram business account linked to your Facebook page'] },
-  { key: 'facebook', name: 'Facebook', icon: 'people', does: 'Brings messages to your Facebook page into Leads. First messages to shops stay a task for you.', needs: ['Your Facebook business page'] },
-  { key: 'linkedin', name: 'LinkedIn', icon: 'briefcase', does: 'Stays a task for you: LinkedIn bans bots that send messages. The app drafts the note and reminds you.', needs: ['The profile that will send connection notes'] },
-  { key: 'data', name: 'Business data for city search', icon: 'pin', does: 'Finds jewellers in a city by itself. Until then, import a list or ask Claude in chat.', needs: ['OpenStreetMap (free), Google Places, or a data provider', 'Customs data on HS 7113 and 7104 importers (optional)'] },
-  { key: 'catalogue', name: 'Catalogue and prices', icon: 'gem', does: 'Fills the catalogue and price-list links in every message, and later powers personal catalogue links.', needs: ['Catalogue (Excel or CSV, photos, IGI numbers)', 'Price list or pricing formula, by tier'] },
+  { key: 'email', name: 'Email sending', icon: 'mail', does: (days) => `Sends the ${days.email || 'campaign'} emails by itself, 25 new shops a day, and pulls replies into Leads.`, needs: ['The Gmail address the emails should come from', 'Your go-ahead to start sending'] },
+  { key: 'whatsapp', name: 'WhatsApp Business', icon: 'bubble', does: (days) => `Sends the ${days.whatsapp || 'WhatsApp'} catalogue and prices to shops that said yes to WhatsApp, and brings every WhatsApp reply into Leads.`, needs: ['A Meta Business account for Ark Diamond (business.facebook.com), with the business verified', 'A phone number for WhatsApp Business that is not on the WhatsApp app', 'Two message templates approved by Meta: catalogue and prices', 'Then send Claude the WhatsApp Business account ID and a permanent access token'] },
+  { key: 'instagram', name: 'Instagram', icon: 'camera', does: 'Brings the DMs shops send you into Leads, so you answer from the app. First messages to new shops stay a task for you: Instagram does not let apps send them.', needs: ['Switch your Instagram to a professional (business) account', 'Link it to your Facebook page', 'Then tell Claude, who connects it'] },
+  { key: 'facebook', name: 'Facebook', icon: 'people', does: 'Brings messages to your Facebook page into Leads. First messages to shops stay a task for you.', needs: ['Your Facebook business page', 'Then tell Claude, who connects it'] },
+  { key: 'linkedin', name: 'LinkedIn', icon: 'briefcase', does: 'Stays a task for you: LinkedIn does not let apps send messages. The campaign writes each note and reminds you on the day.', needs: ['The LinkedIn profile that will send the notes'] },
+  { key: 'data', name: 'Showrooms and research', icon: 'pin', on: true, does: 'Finds every jewellery showroom in the city you choose (OpenStreetMap). Claude then adds emails, owners, company details and online sellers, about 30 shops an hour.', needs: ['Working now'] },
+  { key: 'catalogue', name: 'Catalogue and prices', icon: 'gem', does: 'Fills the catalogue and price-list links in every message.', needs: ['Your catalogue link and price list link, in Your company below'] },
 ];
 
 /* ================= utilities ================= */
@@ -348,6 +354,7 @@ const ICONS = {
   map: '<path d="M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z"/><path d="M9 4.5v13M15 6.5v13"/>',
   chev: '<path d="m7 10 5 5 5-5"/>',
   next: '<path d="m9.5 6 6 6-6 6"/>',
+  meet: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.6" fill="currentColor" stroke="none"/>',
   calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h.01M12 18h.01M15 18h.01"/>',
 };
 const ico = (n, cls = 'svg') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -371,15 +378,19 @@ const S = {
   inbox: new Map(),
   places: new Map(),
   research: new Map(),
+  meetings: new Map(),
+  team: [],
+  teamState: 'idle',
+  me: null,
   researchBusy: false,
   settingsDoc: null,
   suppressDoc: null,
   route: { view: 'today', id: null },
-  filters: { buyers: { q: '', country: '', city: '', type: '', status: '', lab: '' }, leads: { tab: 'needs', stage: '' }, city: { tab: 'review' }, reports: { country: '', city: '', period: 'all' }, calendar: { country: null }, places: { q: '', tab: 'ind' }, orders: { q: '', tab: 'open' }, posts: 'idea' },
+  filters: { buyers: { q: '', country: '', city: '', type: '', status: '', lab: '' }, leads: { view: '', tab: 'needs', stage: '', shops: 'all', q: '' }, city: { tab: 'review' }, reports: { country: '', city: '', period: 'all' }, calendar: { country: null }, places: { q: '', tab: 'ind' }, orders: { q: '', tab: 'open' }, posts: 'idea' },
   selection: new Set(),
   layer: null,
   form: {},
-  ui: { findOpen: {}, buyersShown: 100, calAll: false, orderPanel: '', visitOpen: '', tripMail: '', menu: '', placeSel: '', placePan: '', placesShown: SHOWN_STEP },
+  ui: { findOpen: {}, openPlaces: new Set(), placeShown: {}, histAll: {}, buyersShown: 100, calAll: false, orderPanel: '', visitOpen: '', tripMail: '', menu: '', placeSel: '', placePan: '', placesShown: SHOWN_STEP },
   find: { key: '', busy: false, step: '', error: '' },
   findTried: new Set(),
   ai: { sample: null, images: null, off: false, busy: '', ctl: null, advice: '' },
@@ -467,7 +478,7 @@ async function setFocus(next) {
 }
 
 /* ================= data layer ================= */
-function mapFor(coll) { return { campaigns: S.campaigns, businesses: S.businesses, quotes: S.quotes, samples: S.samples, broadcasts: S.broadcasts, posts: S.posts, orders: S.orders, prices: S.prices, trips: S.trips, inbox: S.inbox, places: S.places, research: S.research }[coll] || null; }
+function mapFor(coll) { return { campaigns: S.campaigns, businesses: S.businesses, quotes: S.quotes, samples: S.samples, broadcasts: S.broadcasts, posts: S.posts, orders: S.orders, prices: S.prices, trips: S.trips, inbox: S.inbox, places: S.places, research: S.research, meetings: S.meetings }[coll] || null; }
 function deepMerge(base, patch) {
   const out = { ...(base || {}) };
   for (const [k, v] of Object.entries(patch || {})) {
@@ -502,6 +513,19 @@ const Data = {
     applyLocal('remove', coll, id);
     if (DB) await DB.collection(coll).doc(id).delete();
   },
+  // many records at once: one call on the phone app, one by one elsewhere
+  async setMany(coll, items) {
+    if (!items.length) return;
+    for (const [id, obj] of items) applyLocal('set', coll, id, obj);
+    if (DB && typeof DB.setMany === 'function') await DB.setMany(coll, items);
+    else if (DB) for (const [id, obj] of items) await DB.collection(coll).doc(id).set(obj);
+  },
+  async updateMany(coll, items) {
+    const m = mapFor(coll); items = items.filter(([id]) => !m || m.get(id)); if (!items.length) return;
+    for (const [id, patch] of items) applyLocal('update', coll, id, patch);
+    if (DB && typeof DB.updateMany === 'function') await DB.updateMany(coll, items);
+    else if (DB) for (const [id, patch] of items) await DB.collection(coll).doc(id).update(patch);
+  },
 };
 const saveSettings = (patch) => Data.set('config', 'settings', { ...(S.settingsDoc ? clone(S.settingsDoc) : {}), ...patch });
 function errorText(e) {
@@ -515,6 +539,14 @@ function errorText(e) {
 async function write(fn) { try { await fn(); return true; } catch (e) { console.warn(e); toast(errorText(e)); return false; } }
 const updateBiz = (id, patch) => Data.update('businesses', id, { ...patch, updatedAt: nowIso() });
 
+// The name of whoever is signed in: a team member's own name, otherwise the sender name on your messages.
+function myName() {
+  if (S.me && String(S.me.name || '').trim()) return String(S.me.name).trim();
+  const first = String(settings().company.senderName || '').trim().split(/\s+/)[0];
+  if (first) return first;
+  const email = S.device && typeof S.device.account === 'function' ? S.device.account() : '';
+  return email ? email.split('@')[0] : 'You';
+}
 /* ================= sequence engine ================= */
 function seqOf(kind, st) { st = st || settings(); return kind === 'fair' ? st.sequences.fair : kind === 'retry' ? st.sequences.retry : st.sequence; }
 function stepsFor(kind, st) { return seqOf(kind || 'city', st).slice().sort((a, b) => (Number(a.day) || 0) - (Number(b.day) || 0)); }
@@ -526,12 +558,25 @@ function effectiveChannel(step, b) {
   if (step.channel === 'instagram' && !c.instagram && c.facebook) return 'facebook';
   return step.channel;
 }
+// A step a shop can't receive is left out for that shop: no email, no Instagram, no phone, or (for the second
+// WhatsApp) no opt-in. The campaign then finishes with the steps that can reach them.
+function stepApplies(step, b) {
+  const c = contactOf(b); const has = (v) => !!String(v || '').trim();
+  if (step.optinOnly && !b.waOptIn) return false;
+  const ch = effectiveChannel(step, b);
+  if (ch === 'email') return has(c.email);
+  if (ch === 'phone' || ch === 'whatsapp') return has(c.phone) || has(c.whatsapp);
+  if (ch === 'instagram' || ch === 'facebook') return has(c.instagram) || has(c.facebook);
+  if (ch === 'linkedin') return has(c.linkedin) || has(c.person);
+  return true;
+}
+const reachable = (b) => stepsFor(seqKindOf(b)).some((step) => stepApplies(step, b));
 function stepState(b, st) {
   const today = todayStr();
   return stepsFor(seqKindOf(b), st).map((step) => {
     const due = b.seqStart ? addDays(b.seqStart, Number(step.day) || 0) : null;
-    const done = b.done && b.done[step.id];
-    return { step, due, done, channel: effectiveChannel(step, b), isDue: !!(due && !done && due <= today) };
+    const done = b.done && b.done[step.id]; const na = !done && !stepApplies(step, b);
+    return { step, due, done, na, channel: effectiveChannel(step, b), isDue: !!(due && !done && !na && due <= today) };
   });
 }
 function dayList(ch) {
@@ -542,7 +587,7 @@ function dayList(ch) {
 function dueStepsFor(b, st) { if (b.status !== 'active' || !b.seqStart || isPaused(b)) return []; return stepState(b, st).filter((x) => x.isDue); }
 function nextLabel(b) {
   if (b.status === 'active') {
-    const nx = stepState(b, settings()).find((x) => !x.done);
+    const nx = stepState(b, settings()).find((x) => !x.done && !x.na);
     if (!nx) return 'Finishing';
     const d = daysBetween(todayStr(), nx.due);
     return `${CH_LABEL[nx.channel]} ${d < 0 ? `overdue ${-d} d` : d === 0 ? 'today' : `in ${d} d`}`;
@@ -607,13 +652,33 @@ async function startSequence(ids, opts = {}) {
   else toast(blocked ? 'Those buyers are on your do-not-contact list.' : opts.retry ? 'No buyers are ready for a second try.' : 'Approve buyers first, then start the sequence.');
   return started;
 }
+// Starts the campaign for many shops at once. Best fits go first, and the daily limit decides each shop's first
+// day. Shops already contacted, on the do-not-contact list, or with no way to reach them yet are left as they are.
+function startable(b) { return !!b && ['found', 'approved'].includes(b.status) && !isSuppressed(contactOf(b).email); }
+function campaignPlan(ids, cap) {
+  cap = Math.max(1, Number(cap || settings().sending.dailyCap) || 25);
+  const counts = {};
+  for (const b of allBiz()) if (b.seqStart && b.status === 'active') counts[b.seqStart] = (counts[b.seqStart] || 0) + 1;
+  const pick = ids.map((id) => S.businesses.get(id)).filter(startable);
+  const go = pick.filter(reachable).sort((a, b) => fitScore(b) - fitScore(a) || a.name.localeCompare(b.name));
+  let day = todayStr(); const days = [];
+  for (const b of go) { while ((counts[day] || 0) >= cap) day = addDays(day, 1); counts[day] = (counts[day] || 0) + 1; days.push([b, day]); }
+  return { cap, days, waiting: pick.filter((b) => !reachable(b)), first: days.length ? days[0][1] : '', last: days.length ? days[days.length - 1][1] : '' };
+}
+async function startCampaign(ids, cap) {
+  const plan = campaignPlan(ids, cap); const at = nowIso(); const by = myName();
+  const items = plan.days.map(([b, day]) => [b.id, { status: 'active', approvedAt: b.approvedAt || at, seqKind: (campOf(b) || {}).kind === 'fair' && b.source !== 'import' ? 'fair' : 'city', seqStart: day, done: {}, closedAt: null, startedBy: by, updatedAt: at }]);
+  if (!items.length) return { ...plan, started: 0 };
+  const ok = await write(() => Data.updateMany('businesses', items));
+  return { ...plan, started: ok ? items.length : 0 };
+}
 async function markStep(b, stepId, how, extra) {
   const kind = seqKindOf(b); const steps = stepsFor(kind); const step = steps.find((x) => x.id === stepId);
-  const done = { ...(b.done || {}) }; done[stepId] = { at: nowIso(), how, ...(extra || {}) };
+  const done = { ...(b.done || {}) }; done[stepId] = { at: nowIso(), how, by: myName(), ...(extra || {}) };
   if (step && how === 'sent' && hasVariantB(step)) done[stepId].variant = variantFor(b, step);
   const patch = { done };
   if (how === 'bounced') patch.status = 'bounced';
-  else if (steps.every((x) => done[x.id]) && b.status === 'active') { patch.status = 'closed'; patch.closedAt = nowIso(); }
+  else if (steps.every((x) => done[x.id] || !stepApplies(x, b)) && b.status === 'active') { patch.status = 'closed'; patch.closedAt = nowIso(); }
   return write(() => updateBiz(b.id, patch));
 }
 
@@ -739,7 +804,7 @@ function channelLink(b, channel, text) {
 async function logReply(id, { channel, text, at, tag, gmail }) {
   const b = S.businesses.get(id); if (!b) return false;
   const rules = settings().rules;
-  const msg = { id: uid(), dir: 'in', channel, at, text: String(text || '').slice(0, MSG_MAX), tag: tag || null, ...(gmail ? { gmailId: gmail.id, threadId: gmail.threadId, url: gmail.url, subject: gmail.subject } : {}) };
+  const msg = { id: uid(), dir: 'in', channel, at, text: String(text || '').slice(0, MSG_MAX), tag: tag || null, loggedBy: gmail ? 'Gmail' : myName(), ...(gmail ? { gmailId: gmail.id, threadId: gmail.threadId, url: gmail.url, subject: gmail.subject } : {}) };
   const messages = [...(b.messages || []), msg].slice(-MSG_KEEP);
   const lead = { stage: 'new', createdAt: at, ordersValue: 0, replyHours: [], ...(b.lead || {}) };
   lead.awaitingReply = true; lead.lastInAt = at; lead.lastChannel = channel; lead.remindAt = null;
@@ -768,7 +833,7 @@ async function markAnswered(id, text) {
   const b = S.businesses.get(id); if (!b || !b.lead) return;
   const at = nowIso(); const l = b.lead;
   const messages = [...(b.messages || [])];
-  messages.push({ id: uid(), dir: 'out', channel: l.lastChannel || 'email', at, text: String(text || '').trim().slice(0, MSG_MAX) || '(answered outside the app)' });
+  messages.push({ id: uid(), dir: 'out', channel: l.lastChannel || 'email', at, by: myName(), text: String(text || '').trim().slice(0, MSG_MAX) || '(answered outside the app)' });
   const hrs = l.lastInAt ? Math.max(0, (Date.parse(at) - Date.parse(l.lastInAt)) / 3600000) : null;
   const lead = { ...l, awaitingReply: false, lastOutAt: at, remindAt: null, replyHours: [...(l.replyHours || []), ...(hrs != null ? [Math.round(hrs * 10) / 10] : [])].slice(-30) };
   if (lead.stage === 'new') lead.stage = 'replied';
@@ -790,11 +855,19 @@ async function ensureLead(id, stage) {
   if (!Object.keys(patch).length) return true;
   return write(() => updateBiz(id, patch));
 }
+// Days until a client is likely to order again: their own average gap once they've ordered twice, otherwise your rule.
+function reorderGap(b) {
+  const rule = Number(settings().rules.reorderDays) || 45; if (!b) return rule;
+  const days = ordersOf(b.id).filter((o) => o.status !== 'cancelled').map((o) => String(o.piDate || o.createdAt || '').slice(0, 10)).filter(Boolean).sort();
+  const gaps = days.slice(1).map((d, i) => daysBetween(days[i], d)).filter((g) => g > 0);
+  if (!gaps.length) return rule;
+  return Math.max(14, Math.min(180, Math.round(gaps.reduce((a, g) => a + g, 0) / gaps.length)));
+}
 async function logOrder(id, v, quiet) {
   const b = S.businesses.get(id); if (!b || !(v > 0)) return false;
   if (!b.lead) await ensureLead(id, 'new');
   const cur = S.businesses.get(id); const l = cur.lead || {}; const first = !l.firstOrderAt;
-  const follow = addDays(todayStr(), Number(settings().rules.reorderDays) || 45);
+  const follow = addDays(todayStr(), reorderGap(cur));
   const patch = { lead: { ordersValue: (Number(l.ordersValue) || 0) + v, firstOrderAt: l.firstOrderAt || todayStr(), orders: (Number(l.orders) || 0) + 1, stage: first ? 'first_order' : 'repeat', followUpAt: follow } };
   if (['active', 'found', 'approved'].includes(cur.status)) patch.status = 'replied';
   const ok = await write(() => updateBiz(id, patch));
@@ -859,6 +932,143 @@ function localChip(b) {
   if (li.isOpen) return `<span class="chip good" title="Their local time">${ico('clock')}${li.time} there · shop open</span>`;
   const d = toDateStr(li.opensAt); const when = d === todayStr() ? '' : d === addDays(todayStr(), 1) ? 'tomorrow ' : `${MONTHS[li.opensAt.getMonth()]} ${li.opensAt.getDate()} `;
   return `<span class="chip" title="Their local time">${ico('clock')}${li.time} there · opens ${when}${fmtTime(li.opensAt)} your time</span>`;
+}
+
+/* ---------- meetings ---------- */
+const MEETING_KINDS = [['visit', 'Shop visit', 'pin'], ['video', 'Video call', 'camera'], ['call', 'Phone call', 'phone']];
+const MEETING_LABEL = Object.fromEntries(MEETING_KINDS.map(([k, l]) => [k, l]));
+const meetingsFor = (bid) => [...S.meetings.values()].filter((m) => m.businessId === bid).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+const meetingsToday = () => [...S.meetings.values()].filter((m) => m.status === 'planned' && S.businesses.get(m.businessId) && toDateStr(new Date(m.at)) === todayStr()).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+function defaultMeetingTime() { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(15, 0, 0, 0); return d; }
+function theirTime(b, d) {
+  const tz = b ? tzOf(b) : ''; if (!tz) return '';
+  try { const there = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: tz }); return there === fmtTime(d) ? '' : there; } catch { return ''; }
+}
+function meetingWhen(d) { const day = toDateStr(d); const t = todayStr(); return `${day === t ? 'Today' : day === addDays(t, 1) ? 'Tomorrow' : fmtLongDay(day)}, ${fmtTime(d)}`; }
+const calStamp = (x) => x.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+function gcalUrl(m, b) {
+  const d = new Date(m.at); const end = new Date(d.getTime() + 45 * 60000);
+  return `https://calendar.google.com/calendar/render?${new URLSearchParams({ action: 'TEMPLATE', text: `${MEETING_LABEL[m.kind] || 'Meeting'}: ${b.name}`, dates: `${calStamp(d)}/${calStamp(end)}`, details: m.note || '', location: m.place || '' })}`;
+}
+function icsFor(m, b) {
+  const d = new Date(m.at); const end = new Date(d.getTime() + 45 * 60000);
+  const t = (x) => String(x || '').replace(/[\\;,]/g, (c) => '\\' + c).replace(/\r?\n/g, '\\n');
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Ark Diamond//Outreach//EN', 'BEGIN:VEVENT', `UID:${m.id}@ark-diamond`, `DTSTAMP:${calStamp(new Date())}`, `DTSTART:${calStamp(d)}`, `DTEND:${calStamp(end)}`,
+    `SUMMARY:${t(`${MEETING_LABEL[m.kind] || 'Meeting'}: ${b.name}`)}`, m.place ? `LOCATION:${t(m.place)}` : '', `DESCRIPTION:${t(m.note || '')}`, 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
+}
+function meetingItem(m) {
+  const b = S.businesses.get(m.businessId); if (!b) return '';
+  const d = new Date(m.at); const planned = m.status === 'planned'; const isToday = toDateStr(d) === todayStr();
+  const past = planned && d.getTime() < Date.now() - 3600000; const there = theirTime(b, d);
+  const kind = MEETING_KINDS.find(([k]) => k === m.kind) || MEETING_KINDS[0];
+  const tag = m.status === 'done' ? '<span class="chip good">Done</span>' : m.status === 'cancelled' ? '<span class="chip">Cancelled</span>' : past ? '<span class="chip warn">How did it go?</span>' : isToday ? '<span class="chip accent">Today</span>' : '';
+  const cal = `<a class="btn small${planned && !past && !isToday ? ' primary' : ''}" href="${esc(gcalUrl(m, b))}" target="_blank" rel="noopener">${ico('calendar')}Add to Google Calendar</a>`;
+  const extra = `${planned && !past && !isToday ? '' : cal}<button type="button" class="btn small" data-act="meeting-ics" data-id="${esc(m.id)}">${ico('download')}Calendar file</button><button type="button" class="btn small" data-act="meeting-edit" data-id="${esc(m.id)}">Change</button>${planned ? `<button type="button" class="btn small quiet" data-act="meeting-cancel" data-id="${esc(m.id)}">Cancel meeting</button>` : ''}`;
+  return `<div class="item"><div class="stack">
+    <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta"><span class="ch">${ico(kind[2])}${esc(kind[1])}</span><span>${esc(meetingWhen(d))}</span>${there ? `<span>${esc(there)} in ${esc(b.city || b.country)}</span>` : ''}</div>
+    ${m.place ? `<div class="meta"><span>${esc(m.place)}</span></div>` : ''}${m.note ? `<div class="sub">${esc(m.note)}</div>` : ''}
+    <div class="tags">${tag}${m.by ? `<span class="chip">Booked by ${esc(m.by)}</span>` : ''}</div>
+  </div><div class="actions">${planned && (past || isToday) ? `<button type="button" class="btn small primary" data-act="meeting-done" data-id="${esc(m.id)}">${ico('check')}Done</button>` : planned ? cal : ''}${moreMenu('mt:' + m.id, extra)}</div></div>`;
+}
+function meetingsView() {
+  const all = [...S.meetings.values()].filter((m) => S.businesses.get(m.businessId)).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const upcoming = all.filter((m) => m.status === 'planned' && Date.parse(m.at) >= start.getTime());
+  const open = all.filter((m) => m.status === 'planned' && Date.parse(m.at) < start.getTime()).reverse();
+  const past = all.filter((m) => m.status !== 'planned').reverse().slice(0, 30);
+  return `<header class="head"><div><h1>Meetings</h1><p>Shop visits, video calls and phone calls with your clients, in your time and theirs.</p></div><div class="actions"><button class="btn primary" data-act="meeting-new">${ico('plus')}Book a meeting</button></div></header>
+  ${open.length ? `<section class="section"><h2>How did they go? <span class="count">${open.length}</span></h2><div class="list">${open.map(meetingItem).join('')}</div></section>` : ''}
+  <section class="section"><h2>Coming up <span class="count">${upcoming.length}</span></h2>${upcoming.length ? `<div class="list">${upcoming.map(meetingItem).join('')}</div>` : emptyBox("No meetings booked. Book one here or from a client's page.")}</section>
+  ${past.length ? `<section class="section"><h2>Past <span class="count">${past.length}</span></h2><div class="list">${past.map(meetingItem).join('')}</div></section>` : ''}`;
+}
+function meetingModal() {
+  const L = S.layer; const m = L.id ? S.meetings.get(L.id) : null;
+  const fixed = S.businesses.get((m && m.businessId) || L.businessId || '') || null;
+  const bid = fixed ? fixed.id : fv('mt.biz'); const b = S.businesses.get(bid) || null;
+  const at = fv('mt.at', localDateTime(m ? new Date(m.at) : defaultMeetingTime())); const d = new Date(at);
+  const there = b && !isNaN(d) ? theirTime(b, d) : ''; const kind = fv('mt.kind', (m && m.kind) || 'visit');
+  let pick = '';
+  if (!fixed) {
+    const groups = {};
+    for (const x of allBiz().filter((y) => !['rejected', 'unsubscribed'].includes(y.status)).sort((p, q) => p.name.localeCompare(q.name))) (groups[`${x.city}, ${x.country}`] ||= []).push(x);
+    pick = `<div class="field"><label for="mt-biz">Client</label><select class="input" id="mt-biz" data-k="mt.biz" data-live="1"><option value="">Choose the client</option>${Object.entries(groups).sort().map(([g, list]) => `<optgroup label="${esc(g)}">${list.map((x) => `<option value="${esc(x.id)}" ${bid === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select></div>`;
+  }
+  const place = fv('mt.place', m ? m.place || '' : kind === 'visit' && b ? addressOf(b) : kind === 'call' && b ? contactOf(b).phone || contactOf(b).whatsapp || '' : '');
+  return `<form class="modal" role="dialog" aria-modal="true" aria-labelledby="mt-title" data-form="meeting">
+    <div class="layer-head"><div>${fixed ? `<div class="eyebrow">${esc(fixed.name)}</div>` : ''}<h2 id="mt-title">${m ? 'Change the meeting' : 'Book a meeting'}</h2></div>${closeBtn()}</div>
+    ${pick}
+    <div class="field"><span class="lab">Kind of meeting</span>${seg('mtkind', kind, MEETING_KINDS.map(([k, l]) => [k, l]))}</div>
+    <div class="field"><label for="mt-at">Date and time, your time</label><input class="input" type="datetime-local" id="mt-at" data-k="mt.at" data-live="1" value="${esc(at)}">${there ? `<span class="hint">That's ${esc(there)} in ${esc(b.city || b.country)}.</span>` : ''}</div>
+    <div class="field"><label for="mt-place">${kind === 'visit' ? 'Address' : kind === 'video' ? 'Video link' : 'Phone number'}</label><input class="input" id="mt-place" data-k="mt.place" value="${esc(place)}"></div>
+    <div class="field"><label for="mt-note">What it's about</label><textarea class="input" id="mt-note" data-k="mt.note" style="min-height:70px" placeholder="e.g. Show the bridal samples and agree the first order">${esc(fv('mt.note', m ? m.note || '' : ''))}</textarea></div>
+    <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="submit" class="btn primary">${ico('check')}${m ? 'Save changes' : 'Book meeting'}</button></div>
+  </form>`;
+}
+
+/* ---------- reminders: a date and a note on any client ---------- */
+function remindersDue() {
+  const today = todayStr(); const out = [];
+  for (const b of allBiz()) {
+    if (b.remind && b.remind.date && b.remind.date <= today) out.push({ b, kind: 'remind', date: b.remind.date, note: b.remind.note || 'Reminder', by: b.remind.by || '' });
+    if (b.lead && b.lead.followUpAt && b.lead.followUpAt <= today && !needsReply(b) && b.status !== 'unsubscribed') out.push({ b, kind: 'follow', date: b.lead.followUpAt, note: hasOrdered(b) ? 'Ask about their next order' : 'Follow up', by: '' });
+  }
+  return out.sort((a, c) => a.date.localeCompare(c.date) || a.b.name.localeCompare(c.b.name));
+}
+function reminderItem(x) {
+  const { b } = x; const late = daysBetween(x.date, todayStr()); const ids = `data-id="${esc(b.id)}" data-kind="${x.kind}"`;
+  return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
+    <div class="meta"><span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span>${x.by ? `<span>set by ${esc(x.by)}</span>` : ''}</div>
+    <div class="subj">${esc(x.note)}</div>
+    <div class="tags">${late > 0 ? `<span class="chip warn">Overdue ${late} d</span>` : '<span class="chip accent">Due today</span>'}${b.lead ? stageChip(b.lead.stage) : stateChip(b)}${exChip(b)}</div></div>
+    <div class="actions"><button type="button" class="btn small primary" data-act="remind-done" ${ids}>${ico('check')}Done</button>${moreMenu('rm:' + x.kind + ':' + b.id, `<button type="button" class="btn small" data-act="remind-snooze" ${ids} data-when="1">${ico('clock')}Tomorrow</button><button type="button" class="btn small" data-act="remind-snooze" ${ids} data-when="7">${ico('clock')}Next week</button>`)}</div></div>`;
+}
+function remindModal() {
+  const b = S.businesses.get(S.layer.businessId); if (!b) return '';
+  const cur = b.remind || {}; const pick = fv('rm.pick', cur.date ? 'date' : 'tomorrow');
+  return `<form class="modal" role="dialog" aria-modal="true" aria-labelledby="rm-title" data-form="remind">
+    <div class="layer-head"><div><div class="eyebrow">${esc(b.name)}</div><h2 id="rm-title">Next reminder</h2></div>${closeBtn()}</div>
+    <div class="field"><span class="lab">When</span>${seg('rmpick', pick, [['tomorrow', 'Tomorrow'], ['3d', 'In 3 days'], ['week', 'Next week'], ['date', 'Pick a date']])}</div>
+    ${pick === 'date' ? `<div class="field"><label for="rm-date">Date</label><input class="input" type="date" id="rm-date" data-k="rm.date" value="${esc(fv('rm.date', cur.date || addDays(todayStr(), 1)))}"></div>` : ''}
+    <div class="field"><label for="rm-note">What to do</label><input class="input" id="rm-note" data-k="rm.note" value="${esc(fv('rm.note', cur.note || ''))}" placeholder="e.g. Call about the sample rings"></div>
+    <p class="hint" style="margin:0">On the day, the reminder shows on Today.</p>
+    <div class="actions" style="justify-content:flex-end">${cur.date ? `<button type="button" class="btn quiet" data-act="remind-clear" data-id="${esc(b.id)}">Remove reminder</button>` : ''}<button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="submit" class="btn primary">${ico('check')}Save reminder</button></div>
+  </form>`;
+}
+
+/* ---------- a client's whole story ---------- */
+function historyOf(b) {
+  const ev = []; const add = (at, icon, text) => { if (at) ev.push({ at: String(at), icon, text }); };
+  add(b.createdAt, 'plus', b.source === 'map' ? 'Saved from the showroom map' : b.source === 'research' ? "Saved from Claude's research (sells online)" : b.source === 'import' ? 'Imported from a list' : 'Added');
+  if (b.seqStart) add(`${b.seqStart}T08:00:00`, 'megaphone', `Campaign ${b.seqStart > todayStr() ? 'starts' : 'started'}${b.startedBy ? ` (by ${b.startedBy})` : ''}`);
+  const steps = allSteps();
+  for (const [sid, x] of Object.entries(b.done || {})) {
+    if (!x || !x.at) continue; const st = steps.find((y) => y.id === sid); const ch = st ? CH_LABEL[effectiveChannel(st, b)] || '' : '';
+    add(x.at, x.how === 'skipped' ? 'x' : 'check', `${{ sent: 'Sent', done: 'Done', skipped: 'Skipped', bounced: 'Bounced' }[x.how] || x.how}: ${ch ? `${ch}, ` : ''}${st ? st.title : sid}${x.by ? ` · ${x.by}` : ''}`);
+  }
+  for (const m of b.messages || []) add(m.at, 'chat', m.dir === 'in' ? `They wrote on ${CH_LABEL[m.channel] || m.channel}: “${trunc(m.text, 90)}”` : `${m.by || 'You'} answered on ${CH_LABEL[m.channel] || m.channel}`);
+  for (const m of meetingsFor(b.id)) add(m.at, 'meet', `${MEETING_LABEL[m.kind] || 'Meeting'}${m.status === 'done' ? ', done' : m.status === 'cancelled' ? ', cancelled' : ''}${m.note ? `: ${trunc(m.note, 80)}` : ''}`);
+  for (const q of quotesOf(b.id)) add(q.createdAt, 'doc', `Quote ${q.number}: ${QUOTE_LABEL[q.status] || q.status}`);
+  for (const x of samplesOf(b.id)) add(x.sentAt ? `${x.sentAt}T12:00:00` : x.createdAt, 'box', `Samples sent${x.pieces ? `: ${x.pieces}` : ''}`);
+  for (const o of ordersOf(b.id)) add(o.createdAt, 'receipt', `Order ${o.number}: ${ORDER_LABEL[o.status] || o.status}, ${fmtMoney(orderTotal(o), o.currency)}`);
+  return ev.sort((p, q) => q.at.localeCompare(p.at));
+}
+function historyPanel(b) {
+  const ev = historyOf(b); if (!ev.length) return '';
+  const all = !!S.ui.histAll[b.id]; const shown = all ? ev : ev.slice(0, 8);
+  return `<section class="panel"><h3>History</h3><ol class="hist">${shown.map((x) => `<li>${ico(x.icon)}<span>${esc(x.text)}</span><span class="when">${esc(fmtWhen(x.at))}</span></li>`).join('')}</ol>${ev.length > 8 ? `<div><button type="button" class="btn small" data-act="hist-all" data-id="${esc(b.id)}">${all ? 'Show less' : `Show all ${ev.length}`}</button></div>` : ''}</section>`;
+}
+// Once a shop is serious (quote, samples or an order), the shops most like it that haven't been contacted yet.
+function similarShops(b) {
+  if (!hasOrdered(b) && !(b.lead && ['quoted', 'samples', 'first_order', 'repeat'].includes(b.lead.stage))) return [];
+  return allBiz().filter((x) => x.id !== b.id && x.type === b.type && startable(x) && reachable(x))
+    .map((x) => ({ x, score: fitScore(x) + (b.labGrown && x.labGrown ? 25 : 0) + (x.city !== b.city ? 5 : 0) }))
+    .sort((p, q) => q.score - p.score || p.x.name.localeCompare(q.x.name)).slice(0, 5).map((y) => y.x);
+}
+function similarPanel(b) {
+  const list = similarShops(b); if (!list.length) return '';
+  return `<section class="panel"><h3>Shops like ${esc(b.name)}</h3><p class="hint" style="margin:0">The same kind of shop, not contacted yet${b.labGrown ? ', lab-grown sellers first' : ''}. Good ones to start next.</p>
+    ${list.map((x) => `<div class="srow"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(x.id)}">${esc(x.name)}</button></div><div class="meta"><span>${esc([x.city, x.country].filter(Boolean).join(', '))}</span>${x.labGrown ? '<span class="labmark">sells lab-grown</span>' : ''}</div></div><div class="actions"><button type="button" class="btn small" data-act="camp-one" data-id="${esc(x.id)}">${ico('megaphone')}Start</button></div></div>`).join('')}</section>`;
 }
 
 /* ---------- quotes, samples, broadcasts, seasons ---------- */
@@ -987,7 +1197,7 @@ function orderTodo(o, today) {
   if (o.status === 'shipped' && o.shippedAt && daysBetween(o.shippedAt, today) >= 7) return { tone: 'accent', text: 'Ask whether the parcel arrived' };
   return null;
 }
-const orderTodos = () => focusOrders().map((o) => ({ o, t: orderTodo(o) })).filter((x) => x.t).sort((a, b) => (a.t.tone === 'warn' ? 0 : 1) - (b.t.tone === 'warn' ? 0 : 1) || String(a.o.piDate).localeCompare(String(b.o.piDate)));
+const orderTodos = () => [...S.orders.values()].map((o) => ({ o, t: orderTodo(o) })).filter((x) => x.t).sort((a, b) => (a.t.tone === 'warn' ? 0 : 1) - (b.t.tone === 'warn' ? 0 : 1) || String(a.o.piDate).localeCompare(String(b.o.piDate)));
 const defaultPayAmount = (o) => { const paid = orderPaid(o), adv = orderAdvance(o); return round2(o.status === 'pi' && paid < adv ? adv - paid : Math.max(0, orderTotal(o) - paid)); };
 async function countOrderRevenue(o) {
   // A paid order counts once in the buyer's order value and the reports. An order made from an accepted quote was counted when the quote was accepted.
@@ -1046,7 +1256,7 @@ async function setOrderStatus(oid, v) {
   const b = S.businesses.get(o.businessId);
   if (v === 'delivered' && b) {
     if (!b.lead) await ensureLead(b.id, 'first_order');
-    const day = addDays(todayStr(), Number(settings().rules.reorderDays) || 45);
+    const day = addDays(todayStr(), reorderGap(b));
     await write(() => updateBiz(b.id, { lead: { followUpAt: day } }));
     toast(`Delivered. Reorder check-in set for ${fmtDay(day)}.`); return;
   }
@@ -1434,7 +1644,7 @@ const msgBody = (m) => stripQuoted(m.plaintextBody || m.plaintext_body || '') ||
 async function gmailAnswered(bid, m, threadId) {
   const b = S.businesses.get(bid); if (!b || !b.lead) return;
   const at = msgAt(m); const l = b.lead;
-  const messages = [...(b.messages || []), { id: uid(), dir: 'out', channel: 'email', at, text: msgBody(m).slice(0, MSG_MAX) || '(answered in Gmail)', gmailId: String(m.id), threadId, url: String(m.viewUrl || '') }].slice(-MSG_KEEP);
+  const messages = [...(b.messages || []), { id: uid(), dir: 'out', channel: 'email', at, text: msgBody(m).slice(0, MSG_MAX) || '(answered in Gmail)', by: 'Gmail', gmailId: String(m.id), threadId, url: String(m.viewUrl || '') }].slice(-MSG_KEEP);
   const hrs = l.lastInAt ? Math.max(0, (Date.parse(at) - Date.parse(l.lastInAt)) / 3600000) : null;
   const lead = { ...l, awaitingReply: false, lastOutAt: at, remindAt: null, replyHours: [...(l.replyHours || []), ...(hrs != null ? [Math.round(hrs * 10) / 10] : [])].slice(-30) };
   if (lead.stage === 'new') lead.stage = 'replied';
@@ -1657,6 +1867,8 @@ function mergeShop(s, r) {
 }
 const researchOf = (key) => S.research.get(key) || null;
 const shopsOf = (doc) => { const res = (researchOf(placeKey(doc.country, doc.city)) || {}).results || {}; return (doc.shops || []).map((s) => mergeShop(s, res[s.id])); };
+// Online sellers based in the city (D2C brands, Etsy and Instagram shops): no map position, found by Claude's research.
+const onlineOf = (doc) => { const on = (researchOf(placeKey(doc.country, doc.city)) || {}).online || {}; return Object.entries(on).filter(([, r]) => r && String(r.name || '').trim()).map(([id, r]) => ({ ...mergeShop({ id: String(id).replace(/[^A-Za-z0-9_.:@+-]/g, '-').slice(0, 80), name: String(r.name).replace(/\s+/g, ' ').trim().slice(0, 120), town: doc.city }, r), online: 1 })).sort((a, b) => a.name.localeCompare(b.name)); };
 function buyerIndex(country, city) {
   const idx = { osm: new Map(), name: new Map(), site: new Map(), phone: new Map() };
   for (const b of allBiz()) {
@@ -1675,8 +1887,8 @@ function showroomReport(doc) {
   const rows = shops.map((s) => ({ s, b: buyerFor(s, idx) }));
   const tally = (list, keyOf) => { const m = new Map(); for (const x of list) { const k = keyOf(x); if (!k) continue; const e = m.get(k) || { label: k, n: 0, names: new Map() }; e.n++; m.set(k, e); if (x.s.area) e.names.set(x.s.area, (e.names.get(x.s.area) || 0) + 1); } return [...m.values()].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'en', { numeric: true })); };
   const areas = tally(rows, (x) => ukDistrict(x.s.postcode) || x.s.area || x.s.town || '').map((e) => { const top = [...e.names.entries()].sort((a, b) => b[1] - a[1])[0]; return { ...e, label: top && top[0] !== e.label ? `${e.label}, ${top[0]}` : e.label }; });
-  const chains = rows.filter((x) => x.s.chain);
-  return { total: shops.length, rows, ind: rows.filter((x) => !x.s.chain), chains, mine: rows.filter((x) => x.b), areas, brands: tally(chains, (x) => brandOf(x.s)) };
+  const chains = rows.filter((x) => x.s.chain); const online = onlineOf(doc).map((s) => ({ s, b: buyerFor(s, idx) }));
+  return { total: shops.length, rows, ind: rows.filter((x) => !x.s.chain), chains, online, mine: [...rows, ...online].filter((x) => x.b), areas, brands: tally(chains, (x) => brandOf(x.s)) };
 }
 
 async function osmFetch(url, opts = {}, ms = 30000) {
@@ -1751,7 +1963,11 @@ async function findShowrooms(country, city, force) {
     const doc = { city, country, fetchedAt: nowIso(), source: 'OpenStreetMap', area: { osmType: area.osmType, osmId: area.osmId, lat: area.lat, lon: area.lon, bbox: area.bbox }, shops };
     S.find = { key: '', busy: false, step: '', error: '' };
     ok = await write(() => Data.set('places', key, doc));
-    if (ok) { Object.assign(S.ui, { placeSel: '', placePan: '', placesShown: SHOWN_STEP }); toast(shops.length ? `${shops.length} showrooms found in ${city}` : `No showrooms on the map in ${city}`); }
+    if (ok) {
+      Object.assign(S.ui, { placeSel: '', placePan: '', placesShown: SHOWN_STEP });
+      const saved = await afterScan(key, !!force);
+      toast(shops.length ? `${shops.length} showrooms found in ${city}${saved ? `; ${saved} saved to Leads` : ''}. Claude is finding their details.` : `No showrooms on the map in ${city}`);
+    }
   } catch (e) {
     S.find = e && e.code === 'stopped' ? { key, busy: false, step: '', error: '', stopped: true } : { key, busy: false, step: '', error: findError(e, city) };
   }
@@ -1777,17 +1993,26 @@ function shopWhere(s, doc) {
 async function addShops(key, ids) {
   const doc = S.places.get(key); if (!doc) return 0;
   const idx = buyerIndex(doc.country, doc.city); const want = new Set(ids);
-  const list = shopsOf(doc).filter((s) => want.has(s.id) && !buyerFor(s, idx));
+  const list = [...shopsOf(doc), ...onlineOf(doc)].filter((s) => want.has(s.id) && !buyerFor(s, idx) && !(s.email && isSuppressed(s.email)));
   if (!list.length) return 0;
   const cid = await cityCampaign(doc.city, doc.country); if (!cid) return 0;
-  let n = 0;
-  for (const s of list) {
-    if (s.email && isSuppressed(s.email)) continue;
-    const b = newBiz({ campaignId: cid, name: s.name, type: s.chain ? 'chain' : 'independent', city: doc.city, country: doc.country, source: 'map', labGrown: !!s.labGrown, legalForm: s.legalForm || '', companyNo: s.companyNo || '',
-      notes: `Where: ${shopWhere(s, doc)}\nFound on the showroom map (OpenStreetMap).${s.note ? `\n${s.note}` : ''}`, contact: { person: s.person || '', email: s.email || '', phone: s.phone || '', website: s.website || '', instagram: s.instagram || '', facebook: s.facebook || '' } });
-    if (!(await write(() => Data.set('businesses', Data.newId('businesses'), { ...b, osm: s.id, ...(s.checked ? { researchAt: nowIso() } : {}) })))) break;
-    n++;
-  }
+  const at = nowIso();
+  const items = list.map((s) => {
+    const contact = { person: s.person || '', email: s.email || '', phone: s.phone || '', website: s.website || '', instagram: s.instagram || '', facebook: s.facebook || '' };
+    const notes = s.online ? `Sells online${s.note ? `: ${s.note}` : ''}.\nFound by Claude's research in ${doc.city}.` : `Where: ${shopWhere(s, doc)}\nFound on the showroom map (OpenStreetMap).${s.note ? `\n${s.note}` : ''}`;
+    const b = newBiz({ campaignId: cid, name: s.name, type: s.online ? 'online' : s.chain ? 'chain' : 'independent', city: doc.city, country: doc.country, source: s.online ? 'research' : 'map', labGrown: !!s.labGrown, legalForm: s.legalForm || '', companyNo: s.companyNo || '', notes, contact });
+    return [`m~${key}~${s.id}`.slice(0, 200), { ...b, osm: s.id, ...(s.checked ? { researchAt: at } : {}) }];
+  });
+  return (await write(() => Data.setMany('businesses', items))) ? items.length : 0;
+}
+// After a scan: the independent showrooms are saved for Leads, and Claude's research starts for this city.
+// A rescan starts the research over, so every shop is checked again.
+async function afterScan(key, again) {
+  const doc = S.places.get(key); if (!doc) return 0;
+  const ids = showroomReport(doc).ind.filter((x) => !x.b && !x.s.closed).map((x) => x.s.id);
+  const n = ids.length ? await addShops(key, ids) : 0;
+  const now = nowIso();
+  if (again || !researchOf(key)) await write(() => Data.set('research', key, { city: doc.city, country: doc.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false }));
   return n;
 }
 // New findings fill the empty details of shops already on your list; nothing you typed is overwritten.
@@ -1798,21 +2023,25 @@ async function applyResearch() {
   S.researchBusy = true;
   try {
     for (const [key, rs] of S.research) {
-      const doc = S.places.get(key); const res = (rs && rs.results) || {}; if (!doc || !Object.keys(res).length) continue;
-      const idx = buyerIndex(doc.country, doc.city);
-      for (const s of shopsOf(doc)) {
-        const r = res[s.id]; if (!r) continue;
+      const doc = S.places.get(key); if (!doc || !rs) continue;
+      const res = rs.results || {}; const on = rs.online || {};
+      const idx = buyerIndex(doc.country, doc.city); const items = []; const now = nowIso();
+      for (const s of [...shopsOf(doc), ...onlineOf(doc)]) {
+        const r = s.online ? on[s.id] : res[s.id]; if (!r) continue;
         const at = String(r.checkedAt || rs.updatedAt || ''); const b = buyerFor(s, idx);
         if (!b || (b.researchAt && at && b.researchAt >= at)) continue;
         const c = contactOf(b); const contact = {};
         for (const k of RESEARCH_KEYS) if (s[k] && !String(c[k] || '').trim() && !(k === 'email' && isSuppressed(s[k]))) contact[k] = s[k];
-        const patch = { researchAt: at || nowIso() };
+        const patch = { researchAt: at || now, updatedAt: now };
         if (Object.keys(contact).length) patch.contact = contact;
         if (s.legalForm && !b.legalForm) patch.legalForm = s.legalForm;
         if (s.companyNo && !b.companyNo) patch.companyNo = s.companyNo;
         if (s.labGrown && !b.labGrown) patch.labGrown = true;
-        if (!(await write(() => updateBiz(b.id, patch)))) return;
+        items.push([b.id, patch]);
       }
+      if (items.length && !(await write(() => Data.updateMany('businesses', items)))) return;
+      const fresh = onlineOf(doc).filter((s) => !s.closed && !buyerFor(s, buyerIndex(doc.country, doc.city))).map((s) => s.id);
+      if (fresh.length) await addShops(key, fresh);
     }
   } finally { S.researchBusy = false; }
 }
@@ -1823,21 +2052,22 @@ function markResearchSeen(key) {
   researchSeen.add(key); setTimeout(() => write(() => Data.update('research', key, { seenAt: nowIso() })), 0);
 }
 function researchPanel(key, r) {
-  const rs = researchOf(key); const total = r.ind.length; if (!total) return '';
+  const rs = researchOf(key); const total = r.ind.length; if (!total && !r.online.length) return '';
   const done = r.ind.filter((x) => x.s.checked).length; const st = rs ? rs.status : '';
   const head = '<h3>Emails and details</h3>'; const k = esc(key);
-  const bar = `<div class="progress" role="progressbar" aria-label="Showrooms checked" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${(done / total * 100).toFixed(1)}%"></i></div>`;
+  const bar = `<div class="progress" role="progressbar" aria-label="Showrooms checked" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${(total ? done / total * 100 : 0).toFixed(1)}%"></i></div>`;
+  const online = r.online.length ? `, and found ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'}` : '';
   if (!st) {
     if (!canFind()) return '';
-    return `<section class="panel research">${head}<p class="muted" style="margin:0">Claude finds each independent showroom's website, email, Instagram and owner, and in the UK its company type. It works in the background, ${RESEARCH_BATCH} shops every ${RESEARCH_EVERY_H} hours, so you can close the app.</p><div class="actions"><button type="button" class="btn primary" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
+    return `<section class="panel research">${head}<p class="muted" style="margin:0">Claude finds each independent showroom's website, email, Instagram and owner, and in the UK its company type, and looks for jewellers here that sell online. About ${RESEARCH_BATCH} shops an hour, in the background.</p><div class="actions"><button type="button" class="btn primary" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
   }
   if (st === 'done') {
     const n = (f) => r.ind.filter((x) => x.s.checked && f(x.s)).length; const em = n((s) => s.email), web = n((s) => s.website), lf = n((s) => s.legalForm);
-    return `<section class="panel research">${head}<p style="margin:0">Claude checked all ${total} independent showrooms${rs.finishedAt ? `, finishing ${esc(fmtWhen(rs.finishedAt))}` : ''}: ${em} with an email, ${web} with a website${lf ? `, ${lf} with their company type` : ''}.</p><div class="actions">${moreMenu('research', `<button type="button" class="btn small" data-act="research-again" data-key="${k}">${ico('refresh')}Check them all again</button>`)}</div></section>`;
+    return `<section class="panel research">${head}<p style="margin:0">Claude checked all ${total} independent showrooms${online}${rs.finishedAt ? `, finishing ${esc(fmtWhen(rs.finishedAt))}` : ''}: ${em} with an email, ${web} with a website${lf ? `, ${lf} with their company type` : ''}.</p><div class="actions">${moreMenu('research', `<button type="button" class="btn small" data-act="research-again" data-key="${k}">${ico('refresh')}Check them all again</button>`)}</div></section>`;
   }
   if (st === 'stopped') return `<section class="panel research">${head}<p style="margin:0">Stopped at ${done} of ${total} showrooms. What Claude found so far stays.</p>${bar}<div class="actions"><button type="button" class="btn" data-act="research-continue" data-key="${k}">${ico('refresh')}Continue</button></div></section>`;
-  return `<section class="panel research">${head}<p style="margin:0">${done ? `Claude has checked ${done} of ${total} showrooms.` : `Waiting for Claude to start. It checks every ${RESEARCH_EVERY_H} hours.`}</p>${bar}
-    <p class="hint" style="margin:0">${rs.updatedAt && done ? `Last update ${esc(fmtWhen(rs.updatedAt))}. ` : ''}You can close the app; the details keep coming, and Today tells you when they're all done.</p>
+  return `<section class="panel research">${head}<p style="margin:0">${done ? `Claude has checked ${done} of ${total} showrooms${online}.` : `Claude starts on ${esc(rs.city || 'this city')} within the hour.`}</p>${bar}
+    <p class="hint" style="margin:0">${rs.updatedAt && done ? `Last update ${esc(fmtWhen(rs.updatedAt))}. ` : ''}About ${RESEARCH_BATCH} shops an hour, only for the city you're working on. You can close the app; what Claude finds goes onto the saved shops, and Today tells you when it's done.</p>
     <div class="actions"><button type="button" class="btn small" data-act="research-stop" data-key="${k}">${ico('stop')}Stop</button></div></section>`;
 }
 function researchBanner() {
@@ -1902,6 +2132,16 @@ function showroomsPdf(doc) {
     if (reach) { y += 11; pdf.text(M, y, pdfFit(reach, 'R', 8.5, CW), { size: 8.5, color: MUTED }); }
     y += 7; pdf.line(M, y, R, y, { color: LINE, w: 0.4 });
   }
+  if (r.online.length) {
+    y += 20; room(48); label(`Online sellers (${r.online.length})`);
+    for (const x of r.online) {
+      const s = x.s; const reach = [siteKey(s.website) || cleanDomain(s.website), s.email, s.instagram ? '@' + String(s.instagram).replace(/^@/, '') : ''].filter(Boolean).join('     ');
+      room(14 + (reach ? 11 : 0) + 8);
+      y += 4; pdf.text(M, y + 8, pdfFit(s.name, 'B', 9.5, CW - 80), { f: 'B', size: 9.5, color: INK }); if (x.b) pdf.text(R, y + 8, 'Saved', { f: 'B', size: 8, color: GREEN, align: 'right' }); y += 8;
+      if (reach) { y += 11; pdf.text(M, y, pdfFit(reach, 'R', 8.5, CW), { size: 8.5, color: MUTED }); }
+      y += 7; pdf.line(M, y, R, y, { color: LINE, w: 0.4 });
+    }
+  }
   if (r.brands.length) {
     y += 20; room(40); label(`Chains (${r.chains.length})`);
     for (const ln of pdfWrap(r.brands.map((b) => `${b.label} ${b.n}`).join('    ·    '), 'R', 9, CW)) { room(13); pdf.text(M, y, ln, { size: 9, color: INK }); y += 13; }
@@ -1944,15 +2184,17 @@ function drawMap(L, key) {
   }
   MAPV.map.invalidateSize(false);
   const idx = buyerIndex(doc.country, doc.city); const shops = shopsOf(doc);
-  const mine = shops.filter((s) => buyerFor(s, idx)).map((s) => s.id);
-  const sig = [key, doc.fetchedAt, S.ui.placeSel, mine.join(',')].join('|');
+  const state = new Map(shops.map((s) => { const b = buyerFor(s, idx); return [s.id, b ? shopState(b) : '']; }));
+  const sig = [key, doc.fetchedAt, S.ui.placeSel, [...state.values()].join(',')].join('|');
   if (sig !== MAPV.sig) {
     MAPV.layer.clearLayers(); const css = getComputedStyle(document.documentElement); const tok = (n, d) => css.getPropertyValue(n).trim() || d;
-    const gold = tok('--gold', '#D6B66C'), good = tok('--good', '#79C79C'), grey = tok('--ink-3', '#9A9483'), ink = tok('--ink', '#F3EEE3'); const has = new Set(mine);
-    const order = shops.slice().sort((a, b) => (a.id === S.ui.placeSel) - (b.id === S.ui.placeSel) || (has.has(a.id) - has.has(b.id)) || ((b.chain || 0) - (a.chain || 0)));
+    const gold = tok('--gold', '#D6B66C'), good = tok('--good', '#79C79C'), grey = tok('--ink-3', '#9A9483'), ink = tok('--ink', '#F3EEE3'), blue = tok('--accent', '#1F4FBF');
+    const rank = { replied: 3, campaign: 2, noreply: 1, out: 1, new: 0, '': 0 };
+    const colour = (s) => { const k = state.get(s.id); return k === 'replied' ? good : k === 'campaign' ? blue : k === 'noreply' || k === 'out' || (s.chain && !k) ? grey : gold; };
+    const order = shops.slice().sort((a, b) => (a.id === S.ui.placeSel) - (b.id === S.ui.placeSel) || (rank[state.get(a.id)] - rank[state.get(b.id)]) || ((b.chain || 0) - (a.chain || 0)));
     for (const s of order) {
-      const sel = s.id === S.ui.placeSel; const c = has.has(s.id) ? good : s.chain ? grey : gold;
-      L.circleMarker([s.lat, s.lon], { radius: sel ? 10 : s.chain ? 5 : 6.5, color: sel ? ink : c, weight: sel ? 3 : s.chain ? 1.5 : 1, opacity: 1, fillColor: c, fillOpacity: s.chain && !has.has(s.id) ? 0.12 : 0.92 })
+      const sel = s.id === S.ui.placeSel; const c = colour(s); const ring = s.chain && !state.get(s.id);
+      L.circleMarker([s.lat, s.lon], { radius: sel ? 10 : ring ? 5 : 6.5, color: sel ? ink : c, weight: sel ? 3 : ring ? 1.5 : 1, opacity: 1, fillColor: c, fillOpacity: ring ? 0.12 : 0.92 })
         .bindTooltip(s.name, { direction: 'top', offset: [0, -7] })
         .on('click', () => { S.ui.placeSel = s.id; S.ui.menu = ''; schedule(); })
         .addTo(MAPV.layer);
@@ -2192,16 +2434,17 @@ function render() {
   const f = captureFocus();
   renderNav();
   $('#main').innerHTML = `<div class="wrap">${viewHtml()}</div>`;
+  for (const box of document.querySelectorAll('#main input[data-mixed]')) box.indeterminate = true;
   const h1 = $('#main .head h1'); if (h1 && h1.textContent.trim() === pageTitle()) h1.classList.add('same');
   mountMap();
   $('#layer').innerHTML = S.layer ? layerHtml() : '';
   restoreFocus(f);
 }
 /* ---------- shell: the bar with the page name, the tab bar and the More sheet, on every screen ---------- */
-const PAGE_TITLE = { today: 'Today', showrooms: 'Showrooms', leads: 'Leads', orders: 'Orders', buyers: 'Buyers', cities: 'Campaigns', city: 'Campaigns', trips: 'Visits', trip: 'Visits', prices: 'Prices', calendar: 'Calendar', reports: 'Reports', sequence: 'Messages', connections: 'Connections' };
+const PAGE_TITLE = { today: 'Today', showrooms: 'Showrooms', leads: 'Leads', orders: 'Orders', buyers: 'Buyers', meetings: 'Meetings', cities: 'Campaigns', city: 'Campaigns', trips: 'Visits', trip: 'Visits', prices: 'Prices', calendar: 'Calendar', reports: 'Reports', sequence: 'Messages', connections: 'Connections' };
 const pageTitle = () => PAGE_TITLE[S.route.view] || 'Today';
 const TAB_VIEWS = ['today', 'showrooms', 'leads', 'orders'];
-const MORE_VIEWS = ['buyers', 'cities', 'trips', 'prices', 'calendar', 'reports', 'sequence', 'connections'];
+const MORE_VIEWS = ['buyers', 'meetings', 'cities', 'trips', 'prices', 'calendar', 'reports', 'sequence', 'connections'];
 const MORE_ICON = '<svg class="svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor"/></svg>';
 const shellHtml = {};
 function setShell(id, html) { const el = document.getElementById(id); if (!el || shellHtml[id] === html) return; shellHtml[id] = html; el.innerHTML = html; }
@@ -2233,8 +2476,8 @@ function initShell() {
   window.addEventListener('hashchange', () => closeMore());
 }
 function renderNav() {
-  const waiting = focusBiz().filter(needsReply).length; const ordersDue = orderTodos().length;
-  const items = [['today', 'Today', 'inbox', waiting], ['showrooms', 'Showrooms', 'store', 0], ['leads', 'Leads', 'chat', waiting], ['orders', 'Orders', 'receipt', ordersDue], ['buyers', 'Buyers', 'people', 0], ['cities', 'Campaigns', 'megaphone', 0], ['trips', 'Visits', 'map', 0], ['prices', 'Prices', 'calc', 0], ['calendar', 'Calendar', 'calendar', 0], ['reports', 'Reports', 'bars', 0], ['sequence', 'Messages', 'route', 0], ['connections', 'Connections', 'plug', 0]];
+  const waiting = allBiz().filter(needsReply).length; const ordersDue = orderTodos().length; const meetToday = meetingsToday().length;
+  const items = [['today', 'Today', 'inbox', waiting], ['showrooms', 'Showrooms', 'store', 0], ['leads', 'Leads', 'chat', waiting], ['orders', 'Orders', 'receipt', ordersDue], ['buyers', 'Buyers', 'people', 0], ['meetings', 'Meetings', 'meet', meetToday], ['cities', 'Campaigns', 'megaphone', 0], ['trips', 'Visits', 'map', 0], ['prices', 'Prices', 'calc', 0], ['calendar', 'Calendar', 'calendar', 0], ['reports', 'Reports', 'bars', 0], ['sequence', 'Messages', 'route', 0], ['connections', 'Connections', 'plug', 0]];
   const cur = S.route.view === 'city' ? 'cities' : S.route.view === 'trip' ? 'trips' : S.route.view;
   const link = ([k, label, i, n]) => `<a href="#${k}" ${cur === k ? 'aria-current="page"' : ''}>${ico(i)}<span>${label}</span>${n ? `<span class="badge" aria-label="${n} waiting">${n}</span>` : ''}</a>`;
   const byKey = Object.fromEntries(items.map((x) => [x[0], x]));
@@ -2242,7 +2485,7 @@ function renderNav() {
   setShell('tabbar', TAB_VIEWS.map((k) => link(byKey[k])).join('') + `<button type="button" id="tab-more" data-act="more" aria-haspopup="dialog" aria-controls="more" ${MORE_VIEWS.includes(cur) ? 'aria-current="page"' : ''}>${MORE_ICON}<span>More</span></button>`);
   const more = $('#tab-more'); if (more) more.setAttribute('aria-expanded', String(moreOpen()));
   setShell('more-nav', MORE_VIEWS.map((k) => link(byKey[k])).join(''));
-  const total = S.campaigns.size + S.businesses.size + S.quotes.size + S.samples.size + S.broadcasts.size + S.posts.size + S.orders.size + S.prices.size + S.trips.size + S.places.size + S.research.size;
+  const total = S.campaigns.size + S.businesses.size + S.quotes.size + S.samples.size + S.broadcasts.size + S.posts.size + S.orders.size + S.prices.size + S.trips.size + S.places.size + S.research.size + S.meetings.size;
   const modeNote = S.mode === 'db' ? `<b>${total.toLocaleString('en-US')}</b> of ${CAP.toLocaleString('en-US')} records used.` : S.mode === 'local' ? "<b>Practice mode.</b> Changes here aren't saved." : '';
   const foot = `${modeNote}<br>Channels connect at the end.`;
   setShell('more-foot', foot);
@@ -2252,7 +2495,7 @@ function viewHtml() {
     return '<div class="loading"><h1>Ark Diamond Outreach</h1><p>Loading your campaigns, buyers and leads.</p></div>';
   }
   const v = S.route.view;
-  const body = v === 'showrooms' ? showroomsView() : v === 'cities' ? citiesView() : v === 'city' ? cityView(S.route.id) : v === 'buyers' ? buyersView() : v === 'leads' ? leadsView() : v === 'calendar' ? calendarView() : v === 'reports' ? reportsView() : v === 'sequence' ? sequenceView() : v === 'connections' ? connectionsView() : v === 'orders' ? ordersView() : v === 'prices' ? pricesView() : v === 'trips' ? tripsView() : v === 'trip' ? tripView(S.route.id) : todayView();
+  const body = v === 'meetings' ? meetingsView() : v === 'showrooms' ? showroomsView() : v === 'cities' ? citiesView() : v === 'city' ? cityView(S.route.id) : v === 'buyers' ? buyersView() : v === 'leads' ? leadsView() : v === 'calendar' ? calendarView() : v === 'reports' ? reportsView() : v === 'sequence' ? sequenceView() : v === 'connections' ? connectionsView() : v === 'orders' ? ordersView() : v === 'prices' ? pricesView() : v === 'trips' ? tripsView() : v === 'trip' ? tripView(S.route.id) : todayView();
   const moved = !S.device && MOVED_TO ? `<div class="banner">${ico('alert')}<p><b>Your app has moved.</b> Use Ark Diamond from your iPhone home screen or at <a href="${MOVED_TO}" target="_blank" rel="noopener">yumitdungrani.github.io</a>. Your buyers, orders and replies are kept there now, and this copy in Claude is no longer updated.</p></div>` : '';
   return moved + (S.mode === 'local' ? `<div class="banner">${ico('alert')}<p><b>Practice mode.</b> This copy can't reach your saved data, so nothing you do here is kept. Open Ark Diamond Outreach in Claude to work with your real cities and leads.</p></div>` : '') + body;
 }
@@ -2313,18 +2556,18 @@ function notConnectedBanner() {
 /* ---------- Today ---------- */
 function todayData() {
   const st = settings(); const emails = []; const tasks = []; const today = todayStr();
-  const f = st.focus; const bs = allBiz().filter((b) => inFocus(b, f));
+  const f = st.focus; const bs = allBiz();
   for (const b of bs) for (const x of dueStepsFor(b, st)) (x.channel === 'email' ? emails : tasks).push({ b, ...x });
   const byDue = (a, b) => a.due.localeCompare(b.due) || a.b.name.localeCompare(b.b.name);
   emails.sort(byDue); tasks.sort(byDue);
   const waiting = bs.filter(needsReply).sort((a, b) => String(a.lead.lastInAt).localeCompare(String(b.lead.lastInAt)));
-  const follow = bs.filter((b) => b.lead && b.lead.followUpAt && b.lead.followUpAt <= today && !needsReply(b) && b.status !== 'unsubscribed');
-  const samples = [...S.samples.values()].filter((x) => ['sent', 'delivered', 'kept'].includes(x.status) && x.checkAt && x.checkAt <= today && inFocus(S.businesses.get(x.businessId), f)).sort((a, b) => a.checkAt.localeCompare(b.checkAt));
+  const reminders = remindersDue(); const meetings = meetingsToday();
+  const samples = [...S.samples.values()].filter((x) => ['sent', 'delivered', 'kept'].includes(x.status) && x.checkAt && x.checkAt <= today && S.businesses.get(x.businessId)).sort((a, b) => a.checkAt.localeCompare(b.checkAt));
   const retry = bs.filter((b) => b.status === 'closed' && b.closedAt && !b.noRetry && (Number(b.round) || 1) < 2 && !inbound(b).length && daysBetween(String(b.closedAt).slice(0, 10), today) >= (Number(st.rules.retryAfterDays) || 90) && !isSuppressed(contactOf(b).email));
   const bcs = [...S.broadcasts.values()].map((bc) => ({ bc, left: bcStats(bc).left })).filter((x) => x.left).sort((a, b) => String(b.bc.createdAt).localeCompare(String(a.bc.createdAt)));
   const mine = new Set((f.country ? [f.country] : bs.map((b) => b.country)).filter(Boolean));
   const pitch = SEASONS.filter((x) => seasonPhase(x) === 'now' && (!mine.size || x.countries.some((c) => mine.has(c))));
-  return { emails, tasks, waiting, follow, samples, retry, bcs, pitch, orders: orderTodos() };
+  return { emails, tasks, waiting, reminders, meetings, samples, retry, bcs, pitch, orders: orderTodos() };
 }
 function helloCard(t) {
   const now = new Date(); const hr = now.getHours(); const f = focusNow();
@@ -2345,14 +2588,16 @@ function helloCard(t) {
     const res = !rs ? '' : rs.status === 'done' ? ', details found' : rs.status === 'stopped' ? ', details stopped' : ', finding details';
     place = row('store', `Showrooms in ${esc(f.city)}`, `${n} found${res}`, '#showrooms');
   }
-  const w = t.waiting.length; const o = t.orders.length;
+  const w = t.waiting.length; const o = t.orders.length; const mt = t.meetings.length; const rm = t.reminders.length;
+  const late = t.reminders.filter((x) => x.date < todayStr()).length; const send = t.emails.length + t.tasks.length;
   return `<h1 class="sr-only">Today</h1>
   <section class="hello" aria-label="Your day">
     <h2>${esc(hello)}</h2>
-    <p class="eyebrow">${esc(dateLabel)} · ${esc(focusName())}</p>
+    <p class="eyebrow">${esc(dateLabel)}</p>
     ${row('chat', 'Replies waiting', w ? `<span class="hot">${w}</span>` : '0', w ? 'sec-replies' : '')}
-    ${row('mail', 'Emails due today', String(t.emails.length), t.emails.length ? 'sec-emails' : '')}
-    ${row('check', 'Your tasks', String(t.tasks.length), t.tasks.length ? 'sec-tasks' : '')}
+    ${row('mail', 'To send today', send ? `${t.emails.length} ${t.emails.length === 1 ? 'email' : 'emails'}, ${t.tasks.length} ${t.tasks.length === 1 ? 'task' : 'tasks'}` : 'nothing', t.emails.length ? 'sec-emails' : t.tasks.length ? 'sec-tasks' : '')}
+    ${row('meet', 'Meetings today', String(mt), mt ? 'sec-meetings' : '#meetings')}
+    ${row('clock', 'Reminders', rm ? `${rm} due${late ? `, <span class="hot">${late} overdue</span>` : ''}` : 'none due', rm ? 'sec-reminders' : '')}
     ${row('receipt', 'Orders', o ? `${o} need${o === 1 ? 's' : ''} you` : 'nothing due', '#orders')}
     ${place}
     <button class="btn" data-act="log-reply">${ico('chat')}Log a reply</button>
@@ -2363,10 +2608,9 @@ function todayView() {
   const retrySpan = Math.max(0, ...stepsFor('retry').map((x) => Number(x.day) || 0));
   const pitchNames = [...new Set(t.pitch.map((x) => x.name))];
   const visitsToday = tripsList().some((tr) => (tr.stops || []).some((st) => tripDay(tr.startDate, st.day) === todayStr()));
-  const quiet = !gmailOn() && !visitsToday && ![t.waiting, t.tasks, t.emails, t.orders, t.bcs, t.samples, t.follow, t.retry].some((x) => x.length);
+  const quiet = !gmailOn() && !visitsToday && ![t.waiting, t.tasks, t.emails, t.orders, t.bcs, t.samples, t.reminders, t.meetings, t.retry].some((x) => x.length);
   return `
   ${helloCard(t)}
-  ${outsideBanner()}
   ${researchBanner()}
   ${visitsTodaySection()}
   ${quiet ? emptyBox("You're all caught up. New replies, tasks and emails that fall due show up here.", `<a class="btn" href="#showrooms">${ico('store')}Showrooms</a>`) : ''}
@@ -2374,6 +2618,8 @@ function todayView() {
     ${gmailOn() ? `<p class="hint">${esc(syncLine())}</p>` : ''}
     ${t.waiting.length ? `<div class="list">${t.waiting.map(waitingItem).join('')}</div>` : emptyBox(gmailOn() ? 'No replies waiting. Replies from Gmail land here by themselves, and the app reminds you until you answer.' : 'No replies waiting. When a buyer answers, log it with <b>Log a reply</b> and the app reminds you until you respond.')}
   </section>` : ''}
+  ${t.meetings.length ? `<section class="section" id="sec-meetings"><h2>Meetings today <span class="count">${t.meetings.length}</span></h2><div class="list">${t.meetings.map(meetingItem).join('')}</div></section>` : ''}
+  ${t.reminders.length ? `<section class="section" id="sec-reminders"><h2>Reminders <span class="count">${t.reminders.length}</span></h2><div class="list">${t.reminders.map(reminderItem).join('')}</div></section>` : ''}
   ${t.orders.length ? `<section class="section"><h2>Orders <span class="count">${t.orders.length}</span></h2><div class="list">${t.orders.map(({ o, t: td }) => orderItem(o, td)).join('')}</div></section>` : ''}
   ${t.tasks.length ? `<section class="section" id="sec-tasks"><h2>Your tasks <span class="count">${t.tasks.length}</span></h2>
     <div class="list">${t.tasks.map(taskItem).join('')}</div>
@@ -2381,22 +2627,13 @@ function todayView() {
   ${t.emails.length || S.gm.batch ? emailsSection(t) : ''}
   ${t.bcs.length ? `<section class="section"><h2>Broadcasts to send <span class="count">${t.bcs.reduce((a, x) => a + x.left, 0)}</span></h2><div class="list">${t.bcs.map(({ bc, left }) => `<div class="item"><div class="stack"><div class="title-row">${chLabel(bc.channel)}<button class="linkish" data-act="bc-open" data-id="${esc(bc.id)}">${esc(bc.title)}</button>${exChip(bc)}</div><div class="meta"><span>${left} left to send</span><span>${esc(SEGMENT_LABEL[(bc.audience || {}).segment] || '')}</span></div></div><div class="actions"><button class="btn small primary" data-act="bc-open" data-id="${esc(bc.id)}">Open</button></div></div>`).join('')}</div></section>` : ''}
   ${t.samples.length ? `<section class="section"><h2>Samples to follow up <span class="count">${t.samples.length}</span></h2><div class="list">${t.samples.map(sampleDueItem).join('')}</div></section>` : ''}
-  ${t.follow.length ? `<section class="section"><h2>Follow-ups due <span class="count">${t.follow.length}</span></h2><div class="list">${t.follow.map(followItem).join('')}</div></section>` : ''}
   ${t.retry.length ? `<section class="section"><div class="sec-head"><h2>Ready for a second try <span class="count">${t.retry.length}</span></h2><button class="btn small" data-act="retry-all">${ico('refresh')}Start for all ${t.retry.length}</button></div>
     <p class="hint">These buyers finished the follow-up ${esc(st.rules.retryAfterDays)} or more days ago without answering. The second try is a short ${retrySpan}-day sequence about new designs.</p>
     <div class="list">${t.retry.slice(0, 25).map(retryItem).join('')}</div>${t.retry.length > 25 ? `<p class="hint">And ${t.retry.length - 25} more.</p>` : ''}</section>` : ''}
   ${pitchNames.length ? `<div class="banner plain">${ico('calendar')}<p><b>Retailers are ordering now for ${esc(listAnd(pitchNames.length > 2 ? [...pitchNames.slice(0, 2), 'more'] : pitchNames))}.</b> Send your leads an offer. <a href="#calendar">Open the calendar</a></p></div>` : ''}`;
 }
 // Anything waiting outside the place you're working on still gets a mention, so nothing slips.
-function outsideBanner() {
-  const f = focusNow(); if (!f.country) return '';
-  const replies = allBiz().filter((b) => !inFocus(b, f) && needsReply(b)).length;
-  const orders = [...S.orders.values()].filter((o) => !orderInFocus(o, f) && orderTodo(o)).length;
-  if (!replies && !orders) return '';
-  const parts = [replies ? `${replies} ${replies === 1 ? 'reply is' : 'replies are'} waiting` : '', orders ? `${orders} ${orders === 1 ? 'order needs' : 'orders need'} you` : ''].filter(Boolean);
-  const wider = f.city ? [f.country, `all of ${f.country}`] : ['', 'everywhere'];
-  return `<div class="banner plain">${ico('alert')}<p><b>Outside ${esc(focusName(f))}, ${esc(listAnd(parts))}.</b> <button type="button" class="linkish" data-act="work-on" data-country="${esc(wider[0])}" data-city="">Work on ${esc(wider[1])}</button></p></div>`;
-}
+
 function waitingItem(b) {
   const l = b.lead; const h = hoursSince(l.lastInAt); const last = inbound(b).slice(-1)[0];
   const tone = h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad';
@@ -2448,12 +2685,7 @@ function emailItem(x) {
     ${moreMenu('e:' + key, `${gm || (pm && !opened) ? `<button class="btn small" data-act="step-done" data-id="${esc(b.id)}" data-step="${esc(step.id)}" data-how="sent">${ico('check')}Mark sent</button>` : ''}${pm && opened ? mailOpen(c.email, e.subject, e.body, key, false) : ''}<button class="btn small" data-act="copy-step" data-id="${esc(b.id)}" data-step="${esc(step.id)}">${ico('copy')}Copy email</button><button class="btn small quiet" data-act="step-done" data-id="${esc(b.id)}" data-step="${esc(step.id)}" data-how="bounced">Bounced</button><button class="btn small quiet" data-act="step-done" data-id="${esc(b.id)}" data-step="${esc(step.id)}" data-how="skipped">Skip</button>`)}
   </div>${S.gm.confirm === key ? sendConfirm(c.email, issues, 'gm-send-go', 'Send') : ''}</div>`;
 }
-function followItem(b) {
-  return `<div class="item tap corner"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
-    <div class="meta"><span>${esc(b.city)}, ${esc(b.country)}</span>${b.lead.ordersValue ? `<span>${money(b.lead.ordersValue)} ordered</span>` : ''}</div>
-    <div class="tags">${stageChip(b.lead.stage)}<span class="chip warn">Follow up ${esc(fmtDay(b.lead.followUpAt))}</span>${exChip(b)}</div></div>
-    <div class="actions">${moreMenu('f:' + b.id, `<button class="btn small quiet" data-act="clear-follow" data-id="${esc(b.id)}">Clear follow-up</button>`)}</div></div>`;
-}
+
 function sampleDueItem(x) {
   const b = S.businesses.get(x.businessId);
   return `<div class="item tap corner"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
@@ -2604,6 +2836,29 @@ function findPanel(c) {
   </div><p class="hint">Automatic city search arrives when you connect a business-data source at the end.</p></section>`;
 }
 
+/* ---------- where a saved shop stands ---------- */
+const SHOP_STATES = [['new', 'Not contacted'], ['campaign', 'In campaign'], ['replied', 'Replied'], ['noreply', 'No reply'], ['out', 'Stopped']];
+function shopState(b) {
+  if (!b) return 'new';
+  if (['unsubscribed', 'bounced', 'rejected'].includes(b.status)) return 'out';
+  if (b.status === 'replied' || inbound(b).length || (b.lead && b.lead.lastInAt)) return 'replied';
+  if (b.status === 'active') return 'campaign';
+  if (b.status === 'closed') return 'noreply';
+  return 'new';
+}
+const hasOrdered = (b) => !!b && ((b.lead && Number(b.lead.ordersValue) > 0) || ordersOf(b.id).some((o) => o.status !== 'cancelled'));
+function stateChip(b) {
+  const st = shopState(b);
+  if (st === 'campaign') {
+    const d = b.seqStart ? daysBetween(b.seqStart, todayStr()) : 0; const span = Math.max(0, ...stepsFor(seqKindOf(b)).map((x) => Number(x.day) || 0));
+    return d < 0 ? `<span class="chip accent">Starts ${esc(fmtDay(b.seqStart))}</span>` : `<span class="chip accent">In campaign · ${d === 0 ? 'started today' : `day ${Math.min(d, span)} of ${span}`}</span>`;
+  }
+  if (st === 'replied') return hasOrdered(b) ? '<span class="chip good">Ordered</span>' : b.lead && b.lead.stage === 'lost' ? '<span class="chip">Not interested</span>' : '<span class="chip good">Replied</span>';
+  if (st === 'noreply') return '<span class="chip warn">No reply</span>';
+  if (st === 'out') return `<span class="chip bad">${esc(STATUS_LABEL[b.status] || 'Stopped')}</span>`;
+  return '<span class="chip">Not contacted</span>';
+}
+
 /* ---------- Showrooms ---------- */
 function cityButtons(country, small) {
   const f = focusNow();
@@ -2634,36 +2889,39 @@ function showroomsView() {
     return head('<p>Every jewellery showroom in the city, on a map, with a short report.</p>') + `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(busy ? S.find.step : `Looking for showrooms in ${f.city}`)}…</b><br><span class="sub">This takes a few seconds, longer for London.</span></p>${busy ? `<button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button>` : ''}</div>`;
   }
   const r = showroomReport(doc); const pf = S.filters.places; const q = pf.q.trim().toLowerCase();
-  const tab = ['ind', 'chain', 'mine'].includes(pf.tab) ? pf.tab : 'ind';
-  let list = tab === 'chain' ? r.chains : tab === 'mine' ? r.mine : r.ind;
+  const tab = ['ind', 'online', 'chain'].includes(pf.tab) ? pf.tab : 'ind';
+  let list = tab === 'chain' ? r.chains : tab === 'online' ? r.online : r.ind;
   if (q) list = list.filter((x) => [x.s.name, x.s.street, x.s.postcode, x.s.area, x.s.brand].join(' ').toLowerCase().includes(q));
   const shown = list.slice(0, S.ui.placesShown); const toAdd = r.ind.filter((x) => !x.b && !x.s.closed); markResearchSeen(key);
   const sel = S.ui.placeSel ? r.rows.find((x) => x.s.id === S.ui.placeSel) : null;
   const areas = r.areas.slice(0, 8); const amax = Math.max(1, ...areas.map((a) => a.n));
   const fetched = String(doc.fetchedAt || '').slice(0, 10);
-  return head(`<p>${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}.</p>`,
-    `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button>${moreMenu('places', `<button class="btn small" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Searching…' : 'Search again'}</button>`)}</div>`) + `
-  <div class="tiles">${tile(r.total, 'Showrooms')}${tile(r.ind.length, 'Independent')}${tile(r.chains.length, 'Chains')}${tile(r.mine.length, 'Your buyers')}</div>
+  const fresh = [...r.ind, ...r.online].filter((x) => x.b && startable(x.b)).length;
+  return head(`<p>${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}${r.online.length ? `, and ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'} from Claude's research` : ''}.</p>`,
+    `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button><button class="btn" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Scanning…' : 'Rescan'}</button></div>`) + `
+  <div class="tiles">${tile(r.total, 'Showrooms')}${tile(r.ind.length, 'Independent')}${tile(r.online.length, 'Online')}${tile(r.chains.length, 'Chains')}</div>
+  ${fresh ? `<div class="banner plain">${ico('megaphone')}<p><b>${fresh} ${fresh === 1 ? 'shop' : 'shops'} in ${esc(doc.city)} saved and not contacted yet.</b> <button type="button" class="linkish" data-act="camp-city" data-country="${esc(doc.country)}" data-city="${esc(doc.city)}">Start the campaign</button></p></div>` : ''}
   ${busy ? `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(S.find.step)}…</b></p><button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button></div>` : ''}
   ${researchPanel(key, r)}
   ${r.total ? `<section class="section map-section"><div class="mapbox" id="map-slot" data-key="${esc(key)}"></div>
-    <div class="legend" aria-hidden="true"><span><i class="ind"></i>Independent</span><span><i class="chain"></i>Chain</span><span><i class="mine"></i>Your buyer</span></div>
+    <div class="legend" aria-hidden="true"><span><i class="ind"></i>Not contacted</span><span><i class="camp"></i>In campaign</span><span><i class="mine"></i>Replied</span><span><i class="chain"></i>Chain</span></div>
     ${sel ? `<div class="list picked">${shopItem(sel, doc, key, true)}</div>` : '<p class="hint">Tap a dot to see the shop.</p>'}</section>` : emptyBox(`OpenStreetMap has no jewellery showrooms in ${esc(doc.city)}. Try a nearby larger town, or ask Claude to search the high street.`, `<button class="btn" data-act="focus-open">${ico('pin')}Change city</button>`)}
   ${areas.length > 1 ? `<section class="section"><h2>Where they are</h2>${barRows(areas.map((a, i) => ({ name: a.label, share: a.n / amax, top: i === 0, val: `<b>${a.n}</b>` })))}<p class="hint">${placeText(doc.country) === placeText(UK) ? 'By postcode district, with the area most of them name.' : 'By area.'} The busiest streets make the best visit days.</p></section>` : ''}
-  ${r.total ? `<section class="section"><div class="sec-head"><h2>The shops</h2>${seg('ptab', tab, [['ind', `Independent ${r.ind.length}`], ['chain', `Chains ${r.chains.length}`], ['mine', `Your buyers ${r.mine.length}`]])}</div>
-    ${tab === 'ind' && toAdd.length ? `<div class="bulk"><span>${toAdd.length} independent ${toAdd.length === 1 ? 'showroom isn\'t' : 'showrooms aren\'t'} on your list yet.</span><button class="btn small primary" data-act="places-add-all" data-key="${esc(key)}">${ico('plus')}Add all ${toAdd.length}</button></div>` : ''}
+  ${r.total || r.online.length ? `<section class="section"><div class="sec-head"><h2>The shops</h2>${seg('ptab', tab, [['ind', `Independent ${r.ind.length}`], ['online', `Online ${r.online.length}`], ['chain', `Chains ${r.chains.length}`]])}</div>
+    ${tab === 'ind' && toAdd.length ? `<div class="bulk"><span>${toAdd.length} independent ${toAdd.length === 1 ? 'showroom isn\'t' : 'showrooms aren\'t'} saved to Leads yet.</span><button class="btn small primary" data-act="places-add-all" data-key="${esc(key)}">${ico('plus')}Save all ${toAdd.length}</button></div>` : ''}
+    ${tab === 'online' && !r.online.length ? `<p class="hint">Claude's research looks for jewellers in ${esc(doc.city)} that sell online, straight to customers: their own website, Etsy, Not On The High Street or Instagram shops. They show here and are saved to Leads.</p>` : ''}
     ${tab === 'chain' && r.brands.length ? `<p class="hint">Chains buy through their head office, so independents are the better first call. ${esc(r.brands.slice(0, 8).map((b) => `${b.label} ${b.n}`).join(', '))}${r.brands.length > 8 ? ', and more' : ''}.</p>` : ''}
     <div class="filters"><input class="input search" id="pl-q" type="search" placeholder="Search name, street or postcode" value="${esc(pf.q)}" data-filter="places.q" aria-label="Search showrooms"></div>
-    ${shown.length ? `<div class="list">${shown.map((x) => shopItem(x, doc, key)).join('')}</div>` : emptyBox(q ? 'No showrooms match.' : tab === 'mine' ? 'None of these showrooms is on your list yet. Tap Add on any of them.' : 'None here.')}
+    ${shown.length ? `<div class="list">${shown.map((x) => shopItem(x, doc, key)).join('')}</div>` : tab === 'online' && !q ? '' : emptyBox(q ? 'No showrooms match.' : 'None here.')}
     ${list.length > shown.length ? `<div><button class="btn" data-act="places-more">Show ${Math.min(SHOWN_STEP, list.length - shown.length)} more of ${list.length - shown.length}</button></div>` : ''}
   </section>` : ''}
-  <p class="hint">Map data © OpenStreetMap contributors. A shop that isn't on OpenStreetMap won't show here.${placeText(doc.country) === placeText(UK) ? ' Postcodes marked “nearby” are the closest postcode to the shop.' : ''}</p>`;
+  <p class="hint">Map data © OpenStreetMap contributors. A shop that isn't on OpenStreetMap won't show here; Claude's research adds online sellers.${placeText(doc.country) === placeText(UK) ? ' Postcodes marked “nearby” are the closest postcode to the shop.' : ''}</p>`;
 }
 function shopItem(x, doc, key, picked) {
   const { s, b } = x; const site = safeUrl(s.website); const tel = String(s.phone || '').replace(/[^\d+]/g, '');
-  const where = [s.street, s.postcode ? `${s.postcode}${s.near ? ' (nearby)' : ''}` : ''].filter(Boolean).join(', ') || s.area || s.town || '';
-  const extra = `${picked ? '' : `<button type="button" class="btn small" data-act="places-show" data-id="${esc(s.id)}">${ico('pin')}Show on map</button>`}<a class="btn small" href="${esc(shopMapsUrl(s, doc))}" target="_blank" rel="noopener">${ico('route')}Directions</a>${tel ? `<a class="btn small" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}${site ? `<a class="btn small" href="${esc(site)}" target="_blank" rel="noopener">${ico('ext')}Website</a>` : ''}${igUrl(s.instagram) ? `<a class="btn small" href="${esc(igUrl(s.instagram))}" target="_blank" rel="noopener">${ico('camera')}Instagram</a>` : ''}${picked ? `<button type="button" class="btn small quiet" data-act="places-unsel">Close</button>` : ''}`;
-  const tags = `${b ? (b.lead ? stageChip(b.lead.stage) : statusChip(b)) : ''}${s.labGrown ? '<span class="chip good">Sells lab-grown</span>' : ''}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${s.closed ? '<span class="chip warn">May have closed</span>' : ''}`;
+  const where = s.online ? '' : [s.street, s.postcode ? `${s.postcode}${s.near ? ' (nearby)' : ''}` : ''].filter(Boolean).join(', ') || s.area || s.town || '';
+  const extra = `${picked || s.online ? '' : `<button type="button" class="btn small" data-act="places-show" data-id="${esc(s.id)}">${ico('pin')}Show on map</button>`}${s.online ? '' : `<a class="btn small" href="${esc(shopMapsUrl(s, doc))}" target="_blank" rel="noopener">${ico('route')}Directions</a>`}${tel ? `<a class="btn small" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}${site ? `<a class="btn small" href="${esc(site)}" target="_blank" rel="noopener">${ico('ext')}Website</a>` : ''}${igUrl(s.instagram) ? `<a class="btn small" href="${esc(igUrl(s.instagram))}" target="_blank" rel="noopener">${ico('camera')}Instagram</a>` : ''}${picked ? `<button type="button" class="btn small quiet" data-act="places-unsel">Close</button>` : ''}`;
+  const tags = `${b ? stateChip(b) : ''}${s.online ? '<span class="chip accent">Sells online</span>' : ''}${s.labGrown ? '<span class="chip good">Sells lab-grown</span>' : ''}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${s.closed ? '<span class="chip warn">May have closed</span>' : ''}`;
   return `<div class="item${b ? ' tap corner' : ''}"><div class="stack">
     <div class="title-row">${b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(s.name)}</button>` : `<b>${esc(s.name)}</b>`}</div>
     <div class="meta">${where ? `<span>${esc(where)}</span>` : ''}${s.phone ? `<span class="mono">${esc(s.phone)}</span>` : ''}${site ? `<span>${esc(cleanDomain(site))}</span>` : ''}${s.email ? `<span class="mono sel">${esc(s.email)}</span>` : ''}</div>
@@ -2716,31 +2974,87 @@ function buyersView() {
 
 /* ---------- Leads ---------- */
 function leadsView() {
-  const f = S.filters.leads; const fo = focusNow(); const leads = allBiz().filter((b) => b.lead && inFocus(b, fo));
-  const needs = leads.filter(needsReply); const snoozed = leads.filter((b) => b.lead.awaitingReply && !needsReply(b));
-  let list = f.tab === 'needs' ? needs : f.tab === 'snoozed' ? snoozed : leads;
-  if (f.tab === 'all' && f.stage) list = list.filter((b) => b.lead.stage === f.stage);
-  list = list.slice().sort((a, b) => f.tab === 'all' ? String(b.lead.lastInAt || '').localeCompare(String(a.lead.lastInAt || '')) : String(a.lead.lastInAt || '').localeCompare(String(b.lead.lastInAt || '')));
+  const fl = S.filters.leads; const leads = allBiz().filter((b) => b.lead); const needs = leads.filter(needsReply);
+  // opening Leads shows replies if any are waiting, otherwise every shop; the choice then stays while you work here
+  const view = ['replies', 'shops'].includes(fl.view) ? fl.view : (fl.view = needs.length ? 'replies' : 'shops');
+  return `<header class="head"><div><h1>Leads</h1></div><div class="actions"><button class="btn primary" data-act="log-reply">${ico('chat')}Log a reply</button><button class="btn" data-act="meeting-new">${ico('calendar')}Book a meeting</button></div></header>
+  ${seg('leadsview', view, [['replies', `Replies ${leads.length}`], ['shops', `All shops ${allBiz().length}`]])}
+  ${view === 'replies' ? repliesPart(leads, needs) : shopsPart()}`;
+}
+// The last answer you or your team sent, and who sent it.
+function lastOut(b) { const m = (b.messages || []).filter((x) => x.dir === 'out').slice(-1)[0]; return m || null; }
+function repliesPart(leads, needs) {
+  const f = S.filters.leads;
+  const snoozed = leads.filter((b) => b.lead.awaitingReply && !needsReply(b));
+  const answered = leads.filter((b) => !b.lead.awaitingReply && lastOut(b));
+  const tab = ['needs', 'answered', 'snoozed', 'all'].includes(f.tab) ? f.tab : 'needs';
+  let list = tab === 'needs' ? needs : tab === 'answered' ? answered : tab === 'snoozed' ? snoozed : leads;
+  if (tab === 'all' && f.stage) list = list.filter((b) => b.lead.stage === f.stage);
+  const at = (b, k) => String(b.lead[k] || '');
+  list = list.slice().sort((a, b) => tab === 'answered' ? at(b, 'lastOutAt').localeCompare(at(a, 'lastOutAt')) : tab === 'all' ? at(b, 'lastInAt').localeCompare(at(a, 'lastInAt')) : at(a, 'lastInAt').localeCompare(at(b, 'lastInAt')));
   const stageCounts = STAGES.map(([k, label]) => [k, label, leads.filter((b) => b.lead.stage === k).length]);
-  const openQuotes = [...S.quotes.values()].filter((q) => q.status === 'sent' && inFocus(S.businesses.get(q.businessId), fo));
+  const openQuotes = [...S.quotes.values()].filter((q) => q.status === 'sent' && S.businesses.get(q.businessId));
   const pipeline = openQuotes.reduce((a, q) => a + quoteUsd(q), 0);
-  const samplesOut = [...S.samples.values()].filter((x) => ['sent', 'delivered', 'kept'].includes(x.status) && inFocus(S.businesses.get(x.businessId), fo)).length;
-  return `<header class="head"><div><h1>Leads</h1></div><div class="actions"><button class="btn primary" data-act="log-reply">${ico('chat')}Log a reply</button><a class="btn" href="#buyers">${ico('people')}All buyers</a></div></header>
-  <div class="tiles tight">${stageCounts.map(([k, label, n]) => `<button type="button" class="tile" data-act="lead-stage" data-val="${k}"><span class="n">${n}</span><span class="l">${label}</span></button>`).join('')}</div>
+  const samplesOut = [...S.samples.values()].filter((x) => ['sent', 'delivered', 'kept'].includes(x.status) && S.businesses.get(x.businessId)).length;
+  return `<div class="tiles tight">${stageCounts.map(([k, label, n]) => `<button type="button" class="tile" data-act="lead-stage" data-val="${k}"><span class="n">${n}</span><span class="l">${label}</span></button>`).join('')}</div>
   ${openQuotes.length || samplesOut ? `<p class="muted" style="margin:0">${openQuotes.length ? `<b>${openQuotes.length}</b> open ${openQuotes.length === 1 ? 'quote' : 'quotes'}${pipeline ? ` worth <b>${money(pipeline)}</b>` : ''}` : ''}${openQuotes.length && samplesOut ? ' · ' : ''}${samplesOut ? `<b>${samplesOut}</b> sample ${samplesOut === 1 ? 'parcel' : 'parcels'} out` : ''}</p>` : ''}
-  <div class="sec-head">${seg('leads', f.tab, [['needs', `Needs reply (${needs.length})`], ['snoozed', `Snoozed (${snoozed.length})`], ['all', `All leads (${leads.length})`]])}
-    ${f.tab === 'all' ? selectHtml('f-stage', 'data-filter="leads.stage" aria-label="Stage"', STAGES, f.stage, 'Every stage') : ''}</div>
-  ${elsewhereHint(allBiz().filter((b) => b.lead && !inFocus(b, fo)).length, 'lead', 'leads')}
-  ${list.length ? `<div class="list">${list.map(leadItem).join('')}</div>` : emptyBox(f.tab === 'needs' ? 'Every reply has an answer. New replies show up here.' : leads.length ? 'No leads in this group.' : 'No leads yet. When a buyer replies, use <b>Log a reply</b> and they appear here.')}`;
+  <div class="sec-head">${seg('leads', tab, [['needs', `Needs reply (${needs.length})`], ['answered', `Answered (${answered.length})`], ['snoozed', `Snoozed (${snoozed.length})`], ['all', `All (${leads.length})`]])}
+    ${tab === 'all' ? selectHtml('f-stage', 'data-filter="leads.stage" aria-label="Stage"', STAGES, f.stage, 'Every stage') : ''}</div>
+  ${list.length ? `<div class="list">${list.map(leadItem).join('')}</div>` : emptyBox(tab === 'needs' ? 'Every reply has an answer. New replies from any city show up here.' : tab === 'answered' ? 'Nothing answered yet. Replies you or your team answer show here, with who answered.' : leads.length ? 'No leads in this group.' : 'No leads yet. When a shop replies by email, WhatsApp or Instagram, it shows here.')}`;
+}
+// Every saved shop, by country and then city, with where it stands. Tick a country, a city or single shops,
+// then Start campaign.
+function placeIds(kind, country, city) { return allBiz().filter((b) => startable(b) && (b.country || '') === country && (kind === 'country' || (b.city || '') === city)).map((b) => b.id); }
+function pickBox(ids, attrs, label) {
+  if (!ids.length) return '<span class="pick-gap" aria-hidden="true"></span>';
+  const n = ids.filter((id) => S.selection.has(id)).length;
+  return `<input type="checkbox" class="pick" ${attrs} aria-label="${esc(label)}" ${n === ids.length ? 'checked' : ''} ${n && n < ids.length ? 'data-mixed="1"' : ''}>`;
+}
+function shopsPart() {
+  const f = S.filters.leads; const q = f.q.trim().toLowerCase(); const all = allBiz();
+  const want = SHOP_STATES.some(([k]) => k === f.shops) ? f.shops : 'all';
+  const count = (k) => all.filter((b) => shopState(b) === k).length;
+  const list = all.filter((b) => (want === 'all' || shopState(b) === want) && (!q || [b.name, b.city, b.country, contactOf(b).email, contactOf(b).person].join(' ').toLowerCase().includes(q)));
+  const tree = new Map();
+  for (const b of list) { const c = b.country || 'No country'; const city = b.city || 'No city'; if (!tree.has(c)) tree.set(c, new Map()); const m = tree.get(c); if (!m.has(city)) m.set(city, []); m.get(city).push(b); }
+  const size = (m) => [...m.values()].reduce((a, x) => a + x.length, 0);
+  const countries = [...tree.entries()].sort((a, b) => size(b[1]) - size(a[1]) || a[0].localeCompare(b[0]));
+  const n = S.selection.size;
+  return `<div class="filters"><input class="input search" id="sh-q" type="search" placeholder="Search shop, city or email" value="${esc(f.q)}" data-filter="leads.q" aria-label="Search saved shops"></div>
+  ${seg('shopstate', want, [['all', `All ${all.length}`], ['new', `Not contacted ${count('new')}`], ['campaign', `In campaign ${count('campaign')}`], ['replied', `Replied ${count('replied')}`], ['noreply', `No reply ${count('noreply')}`]])}
+  ${countries.length ? countries.map(([country, cities]) => countryBlock(country, cities, !!q)).join('') : emptyBox(all.length ? 'No saved shops match.' : 'No shops saved yet. Choose a city in Showrooms: its showrooms are saved here by themselves.', all.length ? '' : `<a class="btn primary" href="#showrooms">${ico('store')}Showrooms</a>`)}
+  ${n ? `<div class="selbar" role="region" aria-label="Selected shops"><span><b>${n}</b> ${n === 1 ? 'shop' : 'shops'} selected</span><button type="button" class="btn quiet" data-act="sel-clear">Clear</button><button type="button" class="btn primary" data-act="camp-start">${ico('megaphone')}Start campaign</button></div><div class="selbar-space" aria-hidden="true"></div>` : ''}`;
+}
+function countryBlock(country, cities, open) {
+  const total = [...cities.values()].reduce((a, x) => a + x.length, 0);
+  const rows = [...cities.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  return `<section class="place-group"><div class="pg-head">${pickBox(placeIds('country', country), `data-selplace="country" data-country="${esc(country)}"`, `Select every shop not contacted yet in ${country}`)}<h2>${esc(country)} <span class="count">${total}</span></h2></div>
+    <div class="list">${rows.map(([city, list]) => cityBlock(country, city, list, open)).join('')}</div></section>`;
+}
+function cityBlock(country, city, list, forceOpen) {
+  const key = `${country}|${city}`; const open = forceOpen || S.ui.openPlaces.has(key);
+  const by = (k) => list.filter((b) => shopState(b) === k).length;
+  const parts = [['new', 'not contacted'], ['campaign', 'in campaign'], ['replied', 'replied'], ['noreply', 'no reply']].map(([k, l]) => [by(k), l]).filter(([v]) => v);
+  const shown = S.ui.placeShown[key] || 40;
+  const sorted = list.slice().sort((a, b) => (startable(b) - startable(a)) || fitScore(b) - fitScore(a) || a.name.localeCompare(b.name));
+  return `<div class="item place-row"><div class="place-top">${pickBox(placeIds('city', country, city), `data-selplace="city" data-country="${esc(country)}" data-city="${esc(city)}"`, `Select every shop not contacted yet in ${city}`)}
+      <button type="button" class="place-open" data-act="place-toggle" data-key="${esc(key)}" aria-expanded="${open}"><span class="stack"><b>${esc(city)}</b><span class="meta"><span>${list.length} ${list.length === 1 ? 'shop' : 'shops'}</span>${parts.map(([v, l]) => `<span>${v} ${l}</span>`).join('')}</span></span>${ico('chev')}</button></div>
+    ${open ? `<div class="place-shops">${sorted.slice(0, shown).map(shopRow).join('')}${sorted.length > shown ? `<div class="shop-more"><button type="button" class="btn small" data-act="place-more" data-key="${esc(key)}">Show ${Math.min(100, sorted.length - shown)} more of ${sorted.length - shown}</button></div>` : ''}</div>` : ''}</div>`;
+}
+function shopRow(b) {
+  const c = contactOf(b); const where = areaOf(b) || '';
+  const reach = [c.email ? 'email' : '', c.phone || c.whatsapp ? 'phone' : '', c.instagram ? 'Instagram' : ''].filter(Boolean);
+  return `<div class="shop-row">${startable(b) ? `<input type="checkbox" class="pick" data-sel="${esc(b.id)}" aria-label="Select ${esc(b.name)}" ${S.selection.has(b.id) ? 'checked' : ''}>` : '<span class="pick-gap" aria-hidden="true"></span>'}
+    <div class="stack"><button type="button" class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button><div class="meta">${where ? `<span>${esc(where)}</span>` : ''}<span>${reach.length ? esc(listAnd(reach)) : 'no contact details yet'}</span></div></div>${stateChip(b)}</div>`;
 }
 function leadItem(b) {
   const l = b.lead; const last = (b.messages || []).slice(-1)[0];
   const waiting = l.awaitingReply; const h = l.lastInAt ? hoursSince(l.lastInAt) : 0;
   return `<div class="item tap"><div class="stack">
     <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
-    <div class="meta">${chLabel(l.lastChannel)}<span>${esc(b.city)}, ${esc(b.country)}</span>${l.followUpAt ? `<span>Follow up ${esc(fmtDay(l.followUpAt))}</span>` : ''}${waiting && needsReply(b) ? `<span>${esc(reminderText(l))}</span>` : ''}</div>
+    <div class="meta">${chLabel(l.lastChannel)}<span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span>${l.followUpAt ? `<span>Follow up ${esc(fmtDay(l.followUpAt))}</span>` : ''}${waiting && needsReply(b) ? `<span>${esc(reminderText(l))}</span>` : ''}</div>
     ${last ? `<div class="msg ${last.dir === 'in' ? 'quote' : ''}">${last.dir === 'out' ? 'You: ' : ''}${esc(trunc(last.text, 220))}</div>` : ''}
-    <div class="tags">${stageChip(l.stage)}${waiting ? `<span class="chip ${needsReply(b) ? (h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad') : ''}">${ico('clock')}${needsReply(b) ? `waiting ${fmtWait(h)}` : `snoozed until ${esc(fmtWhen(l.remindAt))}`}</span>` : ''}${waiting ? windowChip(l.lastInAt, l.lastChannel) : ''}${l.ordersValue ? `<span class="chip gold">${money(l.ordersValue)} ordered</span>` : ''}${exChip(b)}</div>
+    <div class="tags">${stageChip(l.stage)}${!waiting && lastOut(b) ? `<span class="chip good">${ico('check')}Answered${lastOut(b).by ? ` by ${esc(lastOut(b).by)}` : ''} · ${esc(fmtWhen(lastOut(b).at))}</span>` : ''}${waiting ? `<span class="chip ${needsReply(b) ? (h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad') : ''}">${ico('clock')}${needsReply(b) ? `waiting ${fmtWait(h)}` : `snoozed until ${esc(fmtWhen(l.remindAt))}`}</span>` : ''}${waiting ? windowChip(l.lastInAt, l.lastChannel) : ''}${l.ordersValue ? `<span class="chip gold">${money(l.ordersValue)} ordered</span>` : ''}${exChip(b)}</div>
   </div>${waiting ? `<div class="actions">
     <button class="btn small primary" data-act="open-biz" data-id="${esc(b.id)}">Reply</button>
     ${moreMenu('l:' + b.id, `<button class="btn small" data-act="answered" data-id="${esc(b.id)}">${ico('check')}Mark answered</button>`)}
@@ -2989,11 +3303,19 @@ function sendConfirm(to, issues, goAct, goLabel, id) {
     ${issues && issues.length ? `<div class="warnline">${ico('alert')}${esc(issues.join(' · '))}</div>` : ''}
     <button type="button" class="btn small primary" data-act="${goAct}" ${id ? `data-id="${esc(id)}"` : ''}>${ico('mail')}${goLabel}</button><button type="button" class="btn small quiet" data-act="gm-cancel">Cancel</button></div>`;
 }
+// UK shops open around 9:30; emails sent between 10:00 and 12:00 London time arrive while they're at the counter.
+function ukSendHint(emails) {
+  if (!emails.some((x) => x.b.country === UK)) return '';
+  let diff = 0;
+  try { const z = zoned('Europe/London', new Date()); const now = new Date(); diff = (now.getHours() * 60 + now.getMinutes()) - (z.h * 60 + z.m); if (diff > 720) diff -= 1440; if (diff < -720) diff += 1440; } catch { return ''; }
+  const at = (h) => { const d = new Date(); d.setHours(h, diff, 0, 0); return fmtTime(d); };
+  return diff ? ` Best sent between 10:00 and 12:00 UK time, which is ${at(10)} to ${at(12)} for you.` : ' Best sent between 10:00 and 12:00, while UK shops are open.';
+}
 function emailsSection(t) {
   const auto = gmailOn() ? t.emails.filter(autoSendable) : []; const held = t.emails.length - auto.length; const bt = S.gm.batch;
   const hint = gmailOn()
     ? `Send each email from your Gmail with one tap.${auto.length > 1 ? ` <b>Send ${auto.length} with Gmail</b> sends them one every few seconds.` : ''}${held && auto.length ? ` ${held} ${held === 1 ? 'needs' : 'need'} a check first, so ${held === 1 ? 'it stays' : 'they stay'} for you to send one by one.` : ''}`
-    : phoneMail() ? `Tap Open in ${mailAppName()}: the email opens with the address, subject and message filled in. Send it there, then tap Mark sent.`
+    : phoneMail() ? `Tap Open in ${mailAppName()}: the email opens with the address, subject and message filled in. Send it there, then tap Mark sent.${ukSendHint(t.emails)}`
     : "Email isn't connected yet, so copy each one into your mail app, send it, then mark it sent.";
   return `<section class="section" id="sec-emails"><div class="sec-head"><h2>Emails due <span class="count">${t.emails.length}</span></h2><div class="actions">${auto.length > 1 && !bt ? `<button class="btn small primary" data-act="gm-send-all">${ico('mail')}Send ${auto.length} with Gmail</button>` : ''}${t.emails.length > 1 && !bt ? `<button class="btn small" data-act="mark-all-sent">${ico('check')}Mark all ${t.emails.length} as sent</button>` : ''}</div></div>
     ${S.gm.confirm === 'all' && !bt ? `<div class="confirm" role="group" aria-label="Confirm sending"><p>Send ${auto.length} ${auto.length === 1 ? 'email' : 'emails'} from ${fromWho()}, one every few seconds?</p>${mismatchLine()}<button type="button" class="btn small primary" data-act="gm-send-all-go">${ico('mail')}Send ${auto.length}</button><button type="button" class="btn small quiet" data-act="gm-cancel">Cancel</button></div>` : ''}
@@ -3035,13 +3357,13 @@ function orderItem(o, todo) {
 }
 function ordersView() {
   const fo = S.filters.orders; const q = fo.q.trim().toLowerCase();
-  const all = focusOrders().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const all = [...S.orders.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const open = all.filter(isOpenOrder); const todo = orderTodos(); const todoIds = new Set(todo.map((x) => x.o.id));
   const waitingPay = open.filter((o) => (o.status === 'pi' && orderPaid(o) + 0.005 < orderAdvance(o)) || (o.status !== 'pi' && orderDue(o) > 0)).length;
   const toShip = open.filter((o) => o.status === 'ready' && orderDue(o) <= 0).length;
   const closed = all.filter((o) => !isOpenOrder(o));
   const hit = (o) => { if (!q) return true; const b = S.businesses.get(o.businessId); return [o.number, (o.buyer || {}).name, b && b.name, b && b.city].join(' ').toLowerCase().includes(q); };
-  const tab = ['open', 'done', 'all'].includes(fo.tab) ? fo.tab : 'open';
+  const tab = ['open', 'done', 'all', 'clients'].includes(fo.tab) ? fo.tab : 'open';
   const cards = (list) => `<div class="list">${list.map(({ o, t }) => orderItem(o, t)).join('')}</div>`;
   let body = '';
   if (tab === 'open') {
@@ -3049,17 +3371,32 @@ function ordersView() {
     body = `${needs.length ? `<section class="section"><h2>Needs you <span class="count">${needs.length}</span></h2>${cards(needs)}</section>` : ''}
     ${rest.length ? `<section class="section"><h2>Open <span class="count">${rest.length}</span></h2>${cards(rest.map((o) => ({ o, t: null })))}</section>` : ''}
     ${needs.length || rest.length ? '' : emptyBox(q ? 'No open orders match.' : 'No open orders. Delivered and cancelled ones are under Done.')}`;
-  } else {
+  } else if (tab === 'clients') body = clientsPart(all, hit);
+  else {
     const list = (tab === 'done' ? closed : all).filter(hit).slice(0, 60);
     body = list.length ? cards(list.map((o) => ({ o, t: isOpenOrder(o) ? orderTodo(o) : null }))) : emptyBox(q ? 'No orders match.' : 'Nothing here yet.');
   }
   return `<header class="head"><div><h1>Orders</h1></div>
     <div class="actions"><button class="btn primary" data-act="order-new">${ico('plus')}New order</button><a class="btn" href="#prices">${ico('calc')}Prices</a></div></header>
   ${all.length ? `<div class="filters"><input class="input search" id="or-q" type="search" placeholder="Search buyer or order number" value="${esc(fo.q)}" data-filter="orders.q" aria-label="Search orders"></div>
-  ${seg('orders', tab, [['open', `Open ${open.length}`], ['done', `Done ${closed.length}`], ['all', `All ${all.length}`]])}` : ''}
+  ${seg('orders', tab, [['open', `Open ${open.length}`], ['done', `Done ${closed.length}`], ['all', `All ${all.length}`], ['clients', 'By client']])}` : ''}
   <div class="tiles">${tile(open.length, 'Open orders')}${tile(waitingPay, 'Waiting for payment')}${tile(toShip, 'Ready to ship')}${tile(all.filter((o) => o.status === 'delivered').length, 'Delivered')}</div>
-  ${elsewhereHint([...S.orders.values()].filter((o) => !orderInFocus(o)).length, 'order', 'orders')}
   ${all.length ? body : emptyBox('No orders yet. When a buyer accepts a quote, tap <b>Make proforma</b> on it, or start one with <b>New order</b>.')}`;
+}
+// Everyone you do business with: their orders, what they've ordered in total, what's still due.
+function clientsPart(all, hit) {
+  const groups = new Map();
+  for (const o of all.filter(hit)) { const k = o.businessId && S.businesses.get(o.businessId) ? o.businessId : `name:${String((o.buyer || {}).name || 'Unknown').toLowerCase()}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(o); }
+  const rows = [...groups.entries()].map(([k, list]) => {
+    const b = S.businesses.get(k) || null; const sums = {};
+    for (const o of list) { if (o.status === 'cancelled') continue; const c = o.currency || 'USD'; const e = sums[c] || (sums[c] = { total: 0, due: 0 }); e.total += orderTotal(o); e.due += orderDue(o); }
+    const last = list.map((o) => String(o.piDate || o.createdAt || '').slice(0, 10)).sort().pop() || '';
+    return { b, list, sums, last, name: b ? b.name : (list[0].buyer || {}).name || 'Unknown buyer', open: list.filter(isOpenOrder).length };
+  }).sort((a, b) => b.last.localeCompare(a.last));
+  if (!rows.length) return emptyBox('No clients with orders yet.');
+  return `<div class="list">${rows.map((r) => `<div class="item tap"><div class="stack"><div class="title-row"><button class="linkish" ${r.b ? `data-act="open-biz" data-id="${esc(r.b.id)}"` : `data-act="order-open" data-id="${esc(r.list[0].id)}"`}>${esc(r.name)}</button></div>
+    <div class="meta"><span>${r.list.length} ${r.list.length === 1 ? 'order' : 'orders'}</span>${r.last ? `<span>last ${esc(fmtDay(r.last))}</span>` : ''}${r.b && r.b.city ? `<span>${esc(r.b.city)}</span>` : ''}</div>
+    <div class="tags">${Object.entries(r.sums).map(([c, e]) => `<span class="chip gold">${esc(fmtMoney(e.total, c))} ordered</span>${e.due > 0.005 ? `<span class="chip warn">${esc(fmtMoney(e.due, c))} due</span>` : ''}`).join('')}${r.open ? `<span class="chip accent">${r.open} open</span>` : ''}</div></div><span class="go" aria-hidden="true">${ico('next')}</span></div>`).join('')}</div>`;
 }
 function ordersPanel(b) {
   const list = ordersOf(b.id);
@@ -3327,7 +3664,7 @@ function connectionsView() {
   const f = (k, v) => fv(k, v);
   const days = { email: dayList('email'), whatsapp: dayList('whatsapp') };
   return `<header class="head"><div><h1>Connections</h1><p>${gmailOn() ? 'Gmail is connected. The other channels connect at the end, and until then their steps are tasks you mark done.' : phoneMail() ? 'Email opens in your mail app. The other channels connect at the end, and until then their steps are tasks you mark done.' : 'Each channel connects at the end. Until then the app runs every step as a task you mark done.'}</p></div></header>
-  <div class="cards">${CONNECTIONS.map((c) => c.key === 'email' && phoneMail() ? phoneMailCard() : c.key === 'email' && S.gm.state !== 'off' ? gmailCard() : `<div class="ccard"><h3>${ico(c.icon)}${esc(c.name)}</h3><span><span class="chip">Not connected · connects at the end</span></span><p>${esc(typeof c.does === 'function' ? c.does(days) : c.does)}</p><ul>${c.needs.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`).join('')}</div>
+  <div class="cards">${CONNECTIONS.map((c) => c.key === 'email' && phoneMail() ? phoneMailCard() : c.key === 'email' && S.gm.state !== 'off' ? gmailCard() : `<div class="ccard"><h3>${ico(c.icon)}${esc(c.name)}</h3><span>${c.on ? `<span class="chip good">${ico('check')}Working</span>` : '<span class="chip">Not connected yet</span>'}</span><p>${esc(typeof c.does === 'function' ? c.does(days) : c.does)}</p><ul>${c.needs.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`).join('')}</div>
   <section class="section"><h2>Your company</h2><p class="hint">These fill the placeholders in every message. Add the catalogue and price-list links when they're ready.</p>
     <div class="panel"><div class="grid2">
       <div class="field"><label for="co-name">Company name</label><input class="input" id="co-name" data-k="co.name" value="${esc(f('co.name', co.name))}"></div>
@@ -3341,6 +3678,7 @@ function connectionsView() {
       <div class="field"><label for="co-cap">Daily limit for first emails</label><input class="input" id="co-cap" type="number" min="1" max="500" data-k="sd.dailyCap" value="${esc(f('sd.dailyCap', st.sending.dailyCap))}"></div>
     </div><div class="actions"><button class="btn primary" data-act="save-settings">${ico('check')}Save company details</button></div></div>
   </section>
+  ${teamSection()}
   ${tradeSection()}
   <section class="section"><h2>WhatsApp QR code</h2><div class="panel">${qrPanel(co)}</div></section>
   <section class="section"><h2>Do-not-contact list</h2><div class="panel">${dncPanel()}</div></section>
@@ -3349,6 +3687,23 @@ function connectionsView() {
     ${ex ? `<div class="actions"><span>${ex} example records are loaded so you can try the app.</span>${confirmBtn('examples', 'Remove example data', 'Click again to remove all examples', 'remove-examples')}</div>` : '<p class="hint">No example data loaded.</p>'}
   </div></section>
   ${onPhone() ? accountSection() : ''}`;
+}
+function teamSection() {
+  if (!S.device || typeof S.device.team !== 'function') return '';
+  const head = '<section class="section"><h2>Your team</h2>';
+  if (S.teamState === 'missing') return `${head}<div class="panel"><p style="margin:0">Give each person on your team their own login, and see who answered each reply. This needs a one-time update to your app's database first: ask Claude to switch on team logins.</p></div></section>`;
+  if (S.teamState !== 'ready') return `${head}<div class="panel"><p class="hint" style="margin:0">${S.teamState === 'error' ? "Couldn't load the team. Check the connection and open this page again." : 'Loading the team…'}</p></div></section>`;
+  const owner = !!S.me && S.me.role === 'owner';
+  const ownerName = String(settings().company.senderName || '').trim();
+  return `${head}<div class="panel">
+    ${S.team.map((m) => `<div class="srow"><div class="stack"><div class="title-row"><b>${esc(m.name || (m.role === 'owner' ? ownerName || 'Owner' : m.email))}</b>${m.is_me ? '<span class="chip accent">You</span>' : ''}<span class="chip">${m.role === 'owner' ? 'Owner' : 'Team'}</span></div><div class="meta"><span class="mono sel">${esc(m.email)}</span><span>${m.last_sign_in_at ? `signed in ${esc(fmtWhen(m.last_sign_in_at))}` : 'not signed in yet'}</span></div></div>${owner && m.role === 'member' ? `<div class="actions">${confirmBtn('team:' + m.user_id, 'Remove', 'Tap again to remove', 'team-remove', `data-id="${esc(m.user_id)}"`)}</div>` : ''}</div>`).join('')}
+    ${owner ? `<form data-form="team-add" class="grid2">
+      <div class="field"><label for="tm-name">Name</label><input class="input" id="tm-name" data-k="tm.name" value="${esc(fv('tm.name'))}" autocomplete="off"></div>
+      <div class="field"><label for="tm-email">Email</label><input class="input" id="tm-email" type="email" data-k="tm.email" value="${esc(fv('tm.email'))}" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="tm-pass">Starting password, 10 characters or more</label><input class="input" id="tm-pass" data-k="tm.pass" value="${esc(fv('tm.pass'))}" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>
+      <div class="field" style="justify-content:flex-end"><button type="submit" class="btn primary">${ico('plus')}Add to the team</button></div>
+    </form><p class="hint" style="margin:0">They sign in on their own phone with that email and password, and see the same shops, replies and orders. What they send or answer shows their name.</p>` : '<p class="hint" style="margin:0">Only the owner adds or removes people.</p>'}
+  </div></section>`;
 }
 function qrPanel(co) {
   const num = String(co.whatsapp || '').replace(/\D/g, '');
@@ -3395,6 +3750,9 @@ function layerHtml() {
   if (L.kind === 'biz') { const b = S.businesses.get(L.id); if (!b) return ''; return `<div class="layer" data-act="layer-bg">${bizDrawer(b)}</div>`; }
   if (L.kind === 'bcast') { const bc = S.broadcasts.get(L.id); if (!bc) return ''; return `<div class="layer" data-act="layer-bg">${bcDetail(bc)}</div>`; }
   if (L.kind === 'focus') return center(focusModal());
+  if (L.kind === 'startcamp') return center(startCampModal());
+  if (L.kind === 'meeting') return center(meetingModal());
+  if (L.kind === 'remind') return center(remindModal());
   if (L.kind === 'campaign') return center(campaignModal());
   if (L.kind === 'fair') return center(fairModal());
   if (L.kind === 'bizform') return center(bizFormModal());
@@ -3415,11 +3773,15 @@ function bizDrawer(b) {
     ['Facebook', safeUrl(c.facebook) && `<a href="${esc(safeUrl(c.facebook))}" target="_blank" rel="noopener">Facebook page</a>`, true], ['LinkedIn', safeUrl(c.linkedin) && `<a href="${esc(safeUrl(c.linkedin))}" target="_blank" rel="noopener">LinkedIn</a>`, true], ['Company', companyHtml(b), true]].filter((r) => r[1]);
   const steps = stepState(b, st);
   return `<div class="drawer" role="dialog" aria-modal="true" aria-label="${esc(b.name)}">
-    <div class="layer-head"><div><div class="eyebrow">${esc(TYPE_LABEL[b.type] || 'Buyer')} · ${esc([b.city, b.country].filter(Boolean).join(', '))}</div><h2>${esc(b.name)}</h2><div class="chips">${statusChip(b)}${l ? stageChip(l.stage) : ''}${b.metAt ? `<span class="chip gold">Met at ${esc(b.metAt)}</span>` : ''}${localChip(b)}${consentChip(b)}${tripChip(b)}${exChip(b)}</div></div>${closeBtn()}</div>
+    <div class="layer-head"><div><div class="eyebrow">${esc(TYPE_LABEL[b.type] || 'Buyer')} · ${esc([b.city, b.country].filter(Boolean).join(', '))}</div><h2>${esc(b.name)}</h2><div class="chips">${stateChip(b)}${l ? stageChip(l.stage) : ''}${b.metAt ? `<span class="chip gold">Met at ${esc(b.metAt)}</span>` : ''}${localChip(b)}${consentChip(b)}${tripChip(b)}${exChip(b)}</div></div>${closeBtn()}</div>
     ${l && l.awaitingReply ? replyBox(b) : ''}
+    ${(() => { const meet = meetingsFor(b.id).find((m) => m.status === 'planned' && Date.parse(m.at) >= Date.now() - 3600000); return meet ? `<div class="banner plain">${ico('meet')}<p><b>${esc(MEETING_LABEL[meet.kind] || 'Meeting')}: ${esc(meetingWhen(new Date(meet.at)))}.</b> ${meet.note ? `${esc(trunc(meet.note, 120))} ` : ''}<button type="button" class="linkish" data-act="meeting-edit" data-id="${esc(meet.id)}">Change</button></p></div>` : ''; })()}
+    ${b.remind && b.remind.date ? `<div class="banner plain">${ico('clock')}<p><b>Reminder ${esc(fmtDay(b.remind.date))}${b.remind.note ? `: ${esc(b.remind.note)}` : ''}.</b> <button type="button" class="linkish" data-act="remind-new" data-id="${esc(b.id)}">Change</button></p></div>` : ''}
     <div class="actions">${bizActions(b)}</div>
+    <div class="actions"><button type="button" class="btn" data-act="meeting-new" data-id="${esc(b.id)}">${ico('meet')}Book a meeting</button><button type="button" class="btn" data-act="remind-new" data-id="${esc(b.id)}">${ico('clock')}Next reminder</button></div>
     ${l ? leadPanel(b) : ''}
     ${['found', 'rejected'].includes(b.status) ? '' : quotesPanel(b) + ordersPanel(b) + samplesPanel(b)}
+    ${similarPanel(b)}
     <section class="panel"><h3>Contact</h3>${rows.length ? `<dl class="kv">${rows.map(([k, v, raw]) => `<dt>${k}</dt><dd>${raw ? v : esc(v)}</dd>`).join('')}</dl>` : '<p class="hint">No contact details yet.</p>'}
       ${needsConsent(b) ? `<p class="hint">${esc(UK_EMAIL_RULE)}</p>` : ''}
       <label class="switch"><input type="checkbox" id="optin-${esc(b.id)}" data-optin="${esc(b.id)}" ${b.waOptIn ? 'checked' : ''}>WhatsApp opt-in received</label>
@@ -3428,13 +3790,13 @@ function bizDrawer(b) {
     ${b.seqStart ? `<section class="panel"><h3>${esc(SEQ_KINDS.find(([k]) => k === seqKindOf(b))[1])}, started ${esc(fmtDay(b.seqStart))}</h3><ol class="tl">${steps.map((x) => `<li><span class="day">Day ${esc(x.step.day)}</span><span>${chLabel(x.channel)} <span class="sub">${esc(x.step.title)}</span></span><span>${x.done ? `<span class="chip ${x.done.how === 'sent' || x.done.how === 'done' ? 'good' : x.done.how === 'bounced' ? 'warn' : ''}">${esc({ sent: 'Sent', done: 'Done', skipped: 'Skipped', bounced: 'Bounced' }[x.done.how] || x.done.how)}</span>` : b.status === 'active' ? dueChip(x.due) : '<span class="chip">Stopped</span>'}</span></li>`).join('')}</ol></section>` : ''}
     <section class="panel"><h3>Conversation</h3>${(b.messages || []).length ? `<div class="thread">${b.messages.slice().sort((x, y) => String(x.at).localeCompare(String(y.at))).map((m) => `<div class="bubble ${m.dir}">${esc(m.text)}<span class="when">${m.dir === 'in' ? (m.channel === 'visit' ? 'Your visit' : 'They wrote') : 'You wrote'} · ${esc(CH_LABEL[m.channel] || m.channel)} · ${esc(fmtWhen(m.at))} ${m.tag ? '· ' + esc(TAG_LABEL[m.tag] || m.tag) : ''}${/^https:\/\/mail\.google\.com\//.test(m.url || '') ? ` · <a href="${esc(m.url)}" target="_blank" rel="noopener">Open in Gmail</a>` : ''}</span></div>`).join('')}</div>` : '<p class="hint">No messages yet. Log their reply when it comes in.</p>'}
       <div><button class="btn small" data-act="log-reply" data-id="${esc(b.id)}">${ico('chat')}Log a reply</button></div></section>
+    ${historyPanel(b)}
     <section class="panel"><h3>Notes</h3><textarea class="input" id="notes-${esc(b.id)}" data-k="notes.${esc(b.id)}" style="min-height:80px">${esc(fv('notes.' + b.id, b.notes || ''))}</textarea><div><button class="btn small" data-act="save-notes" data-id="${esc(b.id)}">Save notes</button></div></section>
     <div class="actions">${b.status !== 'unsubscribed' ? `<button class="btn small quiet" data-act="unsub" data-id="${esc(b.id)}">Mark unsubscribed</button>` : ''}${confirmBtn('biz:' + b.id, 'Delete buyer', 'Click again to delete', 'delete-biz', `data-id="${esc(b.id)}"`)}</div>
   </div>`;
 }
 function bizActions(b) {
-  if (b.status === 'found') return `<button class="btn primary" data-act="approve" data-id="${esc(b.id)}">${ico('check')}Approve</button><button class="btn" data-act="reject" data-id="${esc(b.id)}">Reject</button>`;
-  if (b.status === 'approved') return `<button class="btn primary" data-act="start-one" data-id="${esc(b.id)}">Start sequence</button><button class="btn quiet" data-act="reject" data-id="${esc(b.id)}">Reject</button>`;
+  if (b.status === 'found' || b.status === 'approved') return `<button class="btn primary" data-act="camp-one" data-id="${esc(b.id)}">${ico('megaphone')}Start campaign</button><button class="btn quiet" data-act="reject" data-id="${esc(b.id)}">Reject</button>`;
   if (b.status === 'active') return `<button class="btn" data-act="log-reply" data-id="${esc(b.id)}">${ico('chat')}They replied</button><button class="btn quiet" data-act="stop-seq" data-id="${esc(b.id)}">Stop sequence</button>`;
   if (b.status === 'rejected') return `<button class="btn" data-act="approve" data-id="${esc(b.id)}">Approve after all</button>`;
   return '';
@@ -3486,6 +3848,28 @@ function samplesPanel(b) {
       <div class="meta"><span>Sent ${esc(fmtDay(x.sentAt))}</span>${x.value ? `<span>${money(x.value)}</span>` : ''}${x.courier ? `<span>${esc(COURIER_LABEL[x.courier] || x.courier)} ${esc(x.tracking || '')}</span>` : ''}${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">Track</a>` : ''}${['sent', 'delivered', 'kept'].includes(x.status) && x.checkAt ? `<span>check in ${esc(fmtDay(x.checkAt))}</span>` : ''}</div>${x.notes ? `<div class="sub">${esc(x.notes)}</div>` : ''}</div>
       <div class="actions">${sampleButtons(x)}</div></div>`; }).join('') : '<p class="hint">No samples sent yet. Log a parcel and the app reminds you to ask for feedback.</p>'}
     <div><button class="btn small" data-act="sample-new" data-id="${esc(b.id)}">${ico('box')}Log samples sent</button></div></section>`;
+}
+function startCampModal() {
+  const L = S.layer; const ids = L.ids || [...S.selection];
+  const cap = Math.max(1, Number(fv('sc.cap', settings().sending.dailyCap)) || 25); const plan = campaignPlan(ids, cap);
+  const n = plan.days.length; const steps = stepsFor('city'); const span = Math.max(0, ...steps.map((x) => Number(x.day) || 0));
+  const links = settings().links; const missing = [!links.catalogue && 'catalogue', !links.priceList && 'price list'].filter(Boolean);
+  const places = [...new Set(plan.days.map(([b]) => b.city).filter(Boolean))];
+  const uk = plan.days.filter(([b]) => needsConsent(b) && contactOf(b).email).length;
+  const today = plan.days.filter(([, d]) => d === todayStr()).length;
+  const when = !n ? '' : plan.first === plan.last ? (plan.first === todayStr() ? 'They all start today.' : `They all start on ${fmtDay(plan.first)}.`) : `${today ? `${today} start today` : `The first start on ${fmtDay(plan.first)}`}, the last on ${fmtDay(plan.last)}.`;
+  return `<form class="modal" role="dialog" aria-modal="true" aria-labelledby="sc-title" data-form="startcamp">
+    <div class="layer-head"><div>${places.length ? `<div class="eyebrow">${esc(places.length > 3 ? `${places.slice(0, 3).join(', ')} and ${places.length - 3} more` : listAnd(places))}</div>` : ''}<h2 id="sc-title">Start the campaign</h2></div>${closeBtn()}</div>
+    ${n ? `<p style="margin:0"><b>${n} ${n === 1 ? 'shop gets' : 'shops get'}</b> your ${span}-day plan. Best fits go first, ${cap} a day. ${when}</p>` : '<p style="margin:0"><b>None of these shops can start yet.</b> They have no email, phone or Instagram so far.</p>'}
+    <div class="field"><span class="lab">Shops to start each day</span>${seg('sccap', String(cap), [['10', '10'], ['25', '25'], ['50', '50'], ['100', '100']])}</div>
+    <section class="panel"><h3>Each shop gets</h3><ol class="tl">${steps.map((x) => `<li><span class="day">Day ${esc(x.day)}</span><span>${chLabel(x.channel)} <span class="sub">${esc(x.title)}</span></span><span></span></li>`).join('')}</ol>
+      <p class="hint" style="margin:0">A shop's steps stop the moment it replies. Steps a shop can't receive (no Instagram, no yes to WhatsApp) are left out for that shop. Instagram and LinkedIn steps are tasks for you on Today; the app writes each message.</p></section>
+    ${plan.waiting.length ? `<p class="warnline">${ico('alert')}${plan.waiting.length} ${plan.waiting.length === 1 ? "shop has" : "shops have"} no email, phone or Instagram yet, so ${plan.waiting.length === 1 ? 'it waits' : 'they wait'}. Start them once Claude's research finds their details.</p>` : ''}
+    ${missing.length ? `<p class="warnline">${ico('alert')}Add your ${esc(listAnd(missing))} link in Connections before the first emails go: the messages use ${missing.length === 1 ? 'it' : 'them'}.</p>` : ''}
+    ${uk ? `<p class="hint" style="margin:0">${uk} UK ${uk === 1 ? "shop isn't" : "shops aren't"} confirmed as limited companies yet. Their emails show a reminder to check first (UK rule).</p>` : ''}
+    <p class="hint" style="margin:0">${gmailOn() ? 'Emails send from your Gmail.' : 'Each day, Today lists the emails due, ready to open in your mail app and send. Automatic sending starts once Gmail sending is connected.'}</p>
+    <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="submit" class="btn primary" ${n ? '' : 'disabled'}>${ico('megaphone')}Start for ${n} ${n === 1 ? 'shop' : 'shops'}</button></div>
+  </form>`;
 }
 function campaignModal() {
   const editing = S.layer.id ? S.campaigns.get(S.layer.id) : null;
@@ -3912,7 +4296,7 @@ function armed(key) {
   S.confirmKey = key; render(); setTimeout(() => { if (S.confirmKey === key) { S.confirmKey = ''; render(); } }, 5000);
   return false;
 }
-const CONFIRM_ACTS = ['delete-campaign', 'delete-biz', 'remove-examples', 'seq-reset', 'bc-delete', 'ans-delete', 'pay-delete', 'order-cancel', 'order-delete', 'price-delete', 'trip-delete'];
+const CONFIRM_ACTS = ['team-remove', 'delete-campaign', 'delete-biz', 'remove-examples', 'seq-reset', 'bc-delete', 'ans-delete', 'pay-delete', 'order-cancel', 'order-delete', 'price-delete', 'trip-delete'];
 async function removeBuyer(bid) {
   for (const q of quotesOf(bid)) await write(() => Data.remove('quotes', q.id));
   for (const x of samplesOf(bid)) await write(() => Data.remove('samples', x.id));
@@ -3957,23 +4341,23 @@ async function onClick(e) {
     case 'research-start': case 'research-again': {
       const k = el.dataset.key; const d = S.places.get(k); if (!d) break; const cur = researchOf(k); const now = nowIso();
       const doc = { city: d.city, country: d.country, status: 'queued', requestedAt: now, updatedAt: now, results: act === 'research-again' || !cur ? {} : cur.results || {} };
-      if (await write(() => Data.set('research', k, doc))) toast(`Claude will start on ${d.city} within ${RESEARCH_EVERY_H} hours`);
+      if (await write(() => Data.set('research', k, doc))) toast(`Claude will start on ${d.city} within the hour`);
       break;
     }
     case 'research-stop': if (await write(() => Data.update('research', el.dataset.key, { status: 'stopped', updatedAt: nowIso() }))) toast('Stopped. What Claude found so far stays.'); break;
-    case 'research-continue': if (await write(() => Data.update('research', el.dataset.key, { status: 'queued', updatedAt: nowIso() }))) toast(`Claude will carry on within ${RESEARCH_EVERY_H} hours`); break;
+    case 'research-continue': if (await write(() => Data.update('research', el.dataset.key, { status: 'queued', updatedAt: nowIso() }))) toast('Claude will carry on within the hour'); break;
     case 'places-retry': { const f = focusNow(); if (f.city) findShowrooms(f.country, f.city, true); break; }
-    case 'places-refresh': { const d = S.places.get(el.dataset.key); if (d) findShowrooms(d.country, d.city, true); break; }
+    case 'places-refresh': { const d = S.places.get(el.dataset.key); if (d) { toast(`Rescanning ${d.city}: the map now, then Claude checks every shop again`); findShowrooms(d.country, d.city, true); } break; }
     case 'places-add': {
       const d = S.places.get(el.dataset.key); const n = await addShops(el.dataset.key, [id]);
-      if (n) toast(`Added to your ${d ? d.city : ''} buyers, ready to review`);
+      if (n) toast('Saved to Leads');
       break;
     }
     case 'places-add-all': {
       const d = S.places.get(el.dataset.key); if (!d) break;
       const ids = showroomReport(d).ind.filter((x) => !x.b && !x.s.closed).map((x) => x.s.id); el.disabled = true;
       const n = await addShops(el.dataset.key, ids);
-      toast(n ? `${n} showrooms added to your ${d.city} buyers, ready to review` : 'They are all on your list already'); render();
+      toast(n ? `${n} showrooms saved to Leads` : 'They are all saved already'); render();
       break;
     }
     case 'places-show': S.ui.placeSel = id; S.ui.placePan = id; render(); { const m = $('#map-slot'); if (m) m.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); } break;
@@ -4002,9 +4386,40 @@ async function onClick(e) {
       if (g === 'mailapp' && S.device) S.device.setMailApp(v);
       if (g === 'ptab') { S.filters.places.tab = v; S.ui.placesShown = SHOWN_STEP; }
       if (g === 'orders') S.filters.orders.tab = v;
+      if (g === 'leadsview') { S.filters.leads.view = v; S.selection.clear(); }
+      if (g === 'shopstate') S.filters.leads.shops = v;
+      if (g === 'sccap') S.form['sc.cap'] = v;
+      if (g === 'mtkind') { S.form['mt.kind'] = v; delete S.form['mt.place']; }
+      if (g === 'rmpick') S.form['rm.pick'] = v;
       render(); break;
     }
-    case 'lead-stage': S.filters.leads.tab = 'all'; S.filters.leads.stage = el.dataset.val; render(); break;
+    case 'lead-stage': S.filters.leads.view = 'replies'; S.filters.leads.tab = 'all'; S.filters.leads.stage = el.dataset.val; render(); break;
+    case 'place-toggle': { const k = el.dataset.key; if (S.ui.openPlaces.has(k)) S.ui.openPlaces.delete(k); else S.ui.openPlaces.add(k); render(); break; }
+    case 'place-more': { const k = el.dataset.key; S.ui.placeShown[k] = (S.ui.placeShown[k] || 40) + 100; render(); break; }
+    case 'sel-clear': S.selection.clear(); render(); break;
+    case 'meeting-new': S.form = {}; openLayer({ kind: 'meeting', businessId: id || '' }); break;
+    case 'meeting-edit': S.form = {}; openLayer({ kind: 'meeting', id }); break;
+    case 'meeting-done': if (await write(() => Data.update('meetings', id, { status: 'done', doneAt: nowIso(), doneBy: myName() }))) toast('Meeting marked done'); break;
+    case 'meeting-cancel': if (await write(() => Data.update('meetings', id, { status: 'cancelled', cancelledAt: nowIso() }))) toast('Meeting cancelled'); break;
+    case 'meeting-ics': {
+      const m = S.meetings.get(id); const b = m && S.businesses.get(m.businessId); if (!m || !b) break;
+      const name = `meeting-${placeText(b.name).slice(0, 30) || 'ark-diamond'}.ics`; const text = icsFor(m, b);
+      if (S.device) { try { await S.device.share({ filename: name, data: text, mimeType: 'text/calendar', title: `${MEETING_LABEL[m.kind] || 'Meeting'}: ${b.name}` }); } catch (err) { if (!(err && err.code === 'declined')) toast("The calendar file couldn't be shared here."); } }
+      else saveFile(name, text);
+      break;
+    }
+    case 'remind-new': S.form = {}; openLayer({ kind: 'remind', businessId: id }); break;
+    case 'remind-clear': if (await write(() => updateBiz(id, { remind: null }))) { S.form = {}; closeLayer(); toast('Reminder removed'); } break;
+    case 'remind-done': if (await write(() => updateBiz(id, el.dataset.kind === 'follow' ? { lead: { followUpAt: null } } : { remind: null }))) toast('Done'); break;
+    case 'remind-snooze': { const day = addDays(todayStr(), Number(el.dataset.when) || 1); if (await write(() => updateBiz(id, el.dataset.kind === 'follow' ? { lead: { followUpAt: day } } : { remind: { date: day } }))) toast(`I'll remind you on ${fmtDay(day)}`); break; }
+    case 'hist-all': S.ui.histAll[id] = !S.ui.histAll[id]; render(); break;
+    case 'team-remove': {
+      if (!armed(el.dataset.key) || !S.device) break;
+      const r = await S.device.removeMember(id); toast(r === 'ok' ? 'Removed from the team; they are signed out everywhere' : "That didn't work. Try again."); await loadTeam(); break;
+    }
+    case 'camp-start': S.form = {}; openLayer({ kind: 'startcamp' }); break;
+    case 'camp-city': { const ids = placeIds('city', el.dataset.country || '', el.dataset.city || ''); S.form = {}; openLayer({ kind: 'startcamp', ids }); break; }
+    case 'camp-one': S.form = {}; openLayer({ kind: 'startcamp', ids: [id] }); break;
     case 'close-layer': closeLayer(); break;
     case 'more': if (moreOpen()) closeMore(); else openMore(); break;
     case 'more-close': closeMore(); break;
@@ -4474,6 +4889,7 @@ async function onChange(e) {
   }
   if (el.dataset.check) { const [oid, key] = el.dataset.check.split(':'); await write(() => Data.update('orders', oid, { checks: { [key]: el.checked }, updatedAt: nowIso() })); }
   if (el.dataset.sel) { if (el.checked) S.selection.add(el.dataset.sel); else S.selection.delete(el.dataset.sel); render(); }
+  if (el.dataset.selplace) { for (const id of placeIds(el.dataset.selplace, el.dataset.country || '', el.dataset.city || '')) { if (el.checked) S.selection.add(id); else S.selection.delete(id); } render(); }
   if (el.dataset.selall) { const list = S.route.view === 'city' ? cityList(S.route.id) : []; for (const b of list) { if (el.checked) S.selection.add(b.id); else S.selection.delete(b.id); } render(); }
   if (el.dataset.optin) await write(() => updateBiz(el.dataset.optin, { waOptIn: el.checked }));
   if (el.dataset.stage) await write(() => updateBiz(el.dataset.stage, { lead: { stage: el.value } }));
@@ -4490,6 +4906,44 @@ async function onSubmit(e) {
   const form = e.target.closest('form[data-form]'); if (!form) return;
   e.preventDefault();
   const kind = form.dataset.form;
+  if (kind === 'meeting') {
+    const L = S.layer; const old = L.id ? S.meetings.get(L.id) : null;
+    const bid = (old && old.businessId) || L.businessId || fv('mt.biz'); const b = S.businesses.get(bid);
+    if (!b) { toast('Choose the client.'); return; }
+    const val = (sel) => String((form.querySelector(sel) || {}).value || '').trim();
+    const d = new Date(val('#mt-at')); if (!val('#mt-at') || isNaN(d)) { toast('Choose the date and time.'); return; }
+    const doc = { businessId: bid, at: d.toISOString(), kind: fv('mt.kind', (old && old.kind) || 'visit'), place: val('#mt-place').slice(0, 300), note: val('#mt-note').slice(0, 1000), status: 'planned', createdAt: old ? old.createdAt : nowIso(), by: old ? old.by || myName() : myName(), updatedAt: nowIso() };
+    if (await write(() => Data.set('meetings', L.id || Data.newId('meetings'), doc))) { S.form = {}; closeLayer(); toast(`Meeting ${old ? 'changed' : 'booked'}: ${meetingWhen(d)}`); }
+    return;
+  }
+  if (kind === 'remind') {
+    const bid = S.layer.businessId; const b = S.businesses.get(bid); if (!b) { closeLayer(); return; }
+    const pick = fv('rm.pick', b.remind && b.remind.date ? 'date' : 'tomorrow');
+    const date = pick === 'tomorrow' ? addDays(todayStr(), 1) : pick === '3d' ? addDays(todayStr(), 3) : pick === 'week' ? addDays(todayStr(), 7) : String((form.querySelector('#rm-date') || {}).value || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('Choose a date.'); return; }
+    const note = String((form.querySelector('#rm-note') || {}).value || '').trim().slice(0, 200);
+    if (await write(() => updateBiz(bid, { remind: { date, note, by: myName(), setAt: nowIso() } }))) { S.form = {}; closeLayer(); toast(`Reminder set for ${fmtDay(date)}`); }
+    return;
+  }
+  if (kind === 'team-add') {
+    if (!S.device || typeof S.device.addMember !== 'function') return;
+    const name = String(fv('tm.name')).trim(); const email = String(fv('tm.email')).trim(); const pass = String(fv('tm.pass'));
+    const r = await S.device.addMember(name, email, pass);
+    toast({ ok: `${name} can sign in now, with that email and password`, bad_name: 'Add their name.', bad_email: 'Enter a full email address.', weak_password: 'Use at least 10 characters for the password.', email_taken: 'That email already has a login.', team_full: 'The team is full (10 logins).', not_allowed: 'Only the owner can add people.' }[r] || "That didn't work. Try again.");
+    if (r === 'ok') { for (const k of ['tm.name', 'tm.email', 'tm.pass']) delete S.form[k]; await loadTeam(); }
+    return;
+  }
+  if (kind === 'startcamp') {
+    const ids = (S.layer && S.layer.ids) || [...S.selection]; const cap = Math.max(1, Number(fv('sc.cap', settings().sending.dailyCap)) || 25);
+    if (cap !== Number(settings().sending.dailyCap)) await write(() => saveSettings({ sending: { ...settings().sending, dailyCap: cap } }));
+    const r = await startCampaign(ids, cap);
+    if (r.started) {
+      const today = r.days.filter(([, d]) => d === todayStr()).length;
+      S.selection.clear(); S.form = {}; closeLayer();
+      toast(`Campaign started for ${r.started} ${r.started === 1 ? 'shop' : 'shops'}${r.first === r.last ? '' : `: ${today ? `${today} today` : `from ${fmtDay(r.first)}`}, the last on ${fmtDay(r.last)}`}`);
+    } else toast('None of these shops could start. They may have started already, or have no contact details yet.');
+    return;
+  }
   if (kind === 'work-city') {
     const city = String(fv('oc.city')).replace(/\s+/g, ' ').trim(); const country = form.dataset.country || focusNow().country;
     if (!city) { toast('Type the name of a city.'); return; }
@@ -4635,14 +5089,14 @@ function route() {
   let view = 'today', id = null;
   if (h.startsWith('city-')) { view = 'city'; id = h.slice(5); }
   else if (h.startsWith('trip-')) { view = 'trip'; id = h.slice(5); }
-  else if (['today', 'showrooms', 'cities', 'buyers', 'leads', 'calendar', 'reports', 'sequence', 'connections', 'orders', 'prices', 'trips'].includes(h)) view = h;
-  if (view !== S.route.view || id !== S.route.id) { S.selection.clear(); S.confirmKey = ''; S.ui.menu = ''; if (view === 'city') S.filters.city.tab = null; }
+  else if (['today', 'showrooms', 'cities', 'buyers', 'leads', 'meetings', 'calendar', 'reports', 'sequence', 'connections', 'orders', 'prices', 'trips'].includes(h)) view = h;
+  if (view !== S.route.view || id !== S.route.id) { S.selection.clear(); S.confirmKey = ''; S.ui.menu = ''; if (view === 'city') S.filters.city.tab = null; if (view === 'leads') S.filters.leads.view = ''; }
   S.route = { view, id };
 }
 function subscribe() {
   const onErr = (e) => { if (e && e.code === 'revoked') S.mode = 'revoked'; toast(errorText(e)); schedule(); };
   const watch = (coll) => DB.collection(coll).onSnapshot((snap) => { S[coll] = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); if (coll in S.loaded) S.loaded[coll] = true; if (['research', 'places', 'businesses'].includes(coll)) queueResearch(); schedule(); }, onErr);
-  for (const coll of ['campaigns', 'businesses', 'quotes', 'samples', 'broadcasts', 'posts', 'orders', 'prices', 'trips', 'places', 'research']) watch(coll);
+  for (const coll of ['campaigns', 'businesses', 'quotes', 'samples', 'broadcasts', 'posts', 'orders', 'prices', 'trips', 'places', 'research', 'meetings']) watch(coll);
   DB.doc('config/settings').onSnapshot((snap) => { S.settingsDoc = snap.exists ? snap.data() : null; S.loaded.settings = true; schedule(); }, onErr);
   DB.doc('config/suppression').onSnapshot((snap) => { S.suppressDoc = snap.exists ? snap.data() : null; schedule(); }, onErr);
   if (S.device) {
@@ -4650,6 +5104,13 @@ function subscribe() {
     DB.collection('inbox').onSnapshot((snap) => { S.inbox = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); queueInbox(); schedule(); }, onErr);
     DB.doc('config/watch').onSnapshot((snap) => { S.watchDoc = snap.exists ? snap.data() : { terms: null }; queueInbox(); }, onErr);
   }
+}
+async function loadTeam() {
+  if (!S.device || typeof S.device.team !== 'function') return;
+  S.teamState = S.teamState === 'ready' ? 'ready' : 'loading';
+  const r = await S.device.team();
+  if (!r || !r.ok) { S.team = []; S.me = null; S.teamState = r && r.code === 'missing_function' ? 'missing' : 'error'; schedule(); return; }
+  S.team = r.members || []; S.me = S.team.find((m) => m.is_me) || null; S.teamState = 'ready'; schedule();
 }
 async function init() {
   document.addEventListener('click', onClick);
@@ -4670,7 +5131,7 @@ async function init() {
   const [db, sample, downloads, device] = await Promise.all([use('db'), use('sample'), use('downloads'), use('device')]);
   S.ai.sample = sample || null; S.downloads = downloads || null; S.device = device || null;
   if (sample && typeof sample.limits === 'function') { try { const lim = await sample.limits(); S.ai.images = lim && lim.images ? lim.images : null; } catch { S.ai.images = null; } }
-  if (db) { DB = db; S.mode = 'db'; subscribe(); }
+  if (db) { DB = db; S.mode = 'db'; subscribe(); loadTeam(); }
   else { S.mode = 'local'; S.loaded = { campaigns: true, businesses: true, settings: true, places: true }; }
   schedule();
   initGmail(await mcpReady).then(async () => {
@@ -4679,6 +5140,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { S, Data, focusNow, setFocus, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
+window.__facet = { S, Data, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, afterScan, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
 init();
 })();
