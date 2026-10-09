@@ -9,7 +9,7 @@
 */
 (() => {
   'use strict';
-  const BUILD = '19c3e3b6c8';
+  const BUILD = '0210f1dcaf';
   const CFG = window.OUTREACH_CONFIG || {};
   const BASE = String(CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const KEY = String(CFG.SUPABASE_KEY || '');
@@ -253,6 +253,16 @@
     collection: (coll) => ({ doc: (id) => docRef(coll, id || newId()), onSnapshot: (next, error) => listen(listSubs, coll, coll, next, error) }),
     doc: (p) => { const i = String(p).indexOf('/'); return docRef(String(p).slice(0, i), String(p).slice(i + 1)); },
     setMany: (coll, items) => many(coll, items, 'outreach_set_many', ([id, data]) => ({ id, data }), () => { const m = mapFor(coll); for (const [id, data] of items) m.set(id, clone(data)); }),
+    // a few records by id, without loading their whole collection (design photos)
+    fetchDocs: async (coll, ids) => {
+      const out = new Map(); const list = [...new Set(ids)].filter((id) => /^[A-Za-z0-9_.~:@+-]{1,200}$/.test(id));
+      for (let i = 0; i < list.length; i += 40) {
+        const part = list.slice(i, i + 40);
+        const rows = await rest('GET', `outreach_docs?select=id,data&coll=eq.${enc(coll)}&id=in.(${part.map((x) => enc(`"${x}"`)).join(',')})`);
+        for (const r of rows) out.set(r.id, r.data);
+      }
+      return out;
+    },
     updateMany: (coll, items) => {
       const m = mapFor(coll); const have = items.filter(([id]) => !loaded.has(coll) || m.has(id));
       return many(coll, have, 'outreach_update_many', ([id, patch]) => ({ id, patch }), () => { for (const [id, patch] of have) if (m.has(id)) m.set(id, deepMerge(m.get(id), patch)); });
@@ -268,7 +278,7 @@
     try {
       // a little overlap, so a change saved while the last look was running is not missed
       const since = new Date(tsMs(cursor) - 120000).toISOString();
-      const rows = await rest('GET', `outreach_docs?select=coll,id,data,updated_at&updated_at=gte.${enc(since)}&order=updated_at.asc&limit=1000`);
+      const rows = await rest('GET', `outreach_docs?select=coll,id,data,updated_at&updated_at=gte.${enc(since)}&coll=neq.photos&order=updated_at.asc&limit=1000`);
       for (const r of rows) {
         bump(r.updated_at);
         if (!loaded.has(r.coll) || inFlight.get(r.coll + '/' + r.id) > 0) continue;
@@ -336,6 +346,20 @@
       return `mailto:${plainAddress(to || '')}?${q}`;
     },
     share: (opts) => share(opts, true),
+    // several files at once (design photos for WhatsApp); a computer downloads them
+    shareFiles({ files, title, text }) {
+      const list = (files || []).map((f) => toFile(f.filename, f.data, f.mimeType));
+      if (navigator.canShare && navigator.share && list.length) {
+        let ok = false; try { ok = navigator.canShare({ files: list }); } catch { ok = false; }
+        if (ok) {
+          const payload = { files: list }; if (title) payload.title = title; if (text) payload.text = text;
+          return navigator.share(payload).then(() => 'shared', (e) => { if (e && e.name === 'AbortError') throw { code: 'declined', message: 'Cancelled' }; list.forEach(download); return 'saved'; });
+        }
+      }
+      list.forEach(download); return Promise.resolve('saved');
+    },
+    // each shop's own catalogue link goes through the app's link service
+    linkBase: BASE + '/functions/v1/open',
     signOut,
     // the team: everyone with their own login to this app; only the owner adds or removes people
     me: () => (session && session.user ? { id: session.user.id, email: session.user.email } : null),

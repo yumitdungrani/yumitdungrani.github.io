@@ -75,6 +75,23 @@ div.app{min-height:100%}
 .eyebrow a{color:inherit;text-decoration-color:var(--line)}
 .eyebrow a:hover{color:var(--accent);text-decoration-color:currentColor}
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.call-results{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.selbar.many{flex-wrap:wrap;row-gap:8px}
+@media (max-width:560px){.selbar.many{row-gap:0}.selbar.many::after{content:"";order:2;flex-basis:100%;height:0}.selbar.many>.btn:not(.quiet){order:3;flex:1 1 0;min-width:0;margin-top:8px;padding:0 10px}.selbar.many+.selbar-space{height:124px}}
+.designs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,158px),1fr));gap:12px}
+.dcard{position:relative;display:flex;flex-direction:column;gap:10px;min-width:0;padding:10px 10px 12px;border-radius:14px;background:var(--surface);box-shadow:var(--card)}
+.dcard.on{outline:2px solid var(--accent);outline-offset:-2px}
+.dcard .dpick{position:absolute;top:16px;left:16px;z-index:1}
+.dcard .actions{justify-content:flex-start}
+.dphoto{display:grid;place-items:center;aspect-ratio:1;max-width:100%;border-radius:10px;background:var(--surface-2);overflow:hidden}
+.dphoto img{width:100%;height:100%;object-fit:cover}
+.dprice{font-weight:800;color:var(--ink)}
+.dphotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.dphotos figure{display:flex;flex-direction:column;gap:6px;margin:0}
+.dphotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:var(--surface-2)}
+.file-btn{position:relative;overflow:hidden;align-self:flex-start}
+.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.file-btn.busy{opacity:.6;pointer-events:none}
 .head>.actions{gap:10px}
 .head>.actions>.btn{flex:1 1 0;min-width:0;min-height:52px;padding:0 14px;border-radius:12px;font-size:16px}
 .head>.actions>.btn.dots{flex:none;width:52px}
@@ -373,6 +390,10 @@ input.search:focus{border-color:var(--accent)}
 .oline .num{font-variant-numeric:tabular-nums;text-align:right}
 .cell{display:flex;flex-direction:column;gap:4px;min-width:0}
 .cell .ml{display:none;font-size:12px;font-weight:700;color:var(--ink-2)}
+.exlines{display:flex;flex-direction:column;gap:10px}
+.exline{display:grid;grid-template-columns:minmax(0,1fr) 128px 128px;align-items:end;gap:8px}
+.exline .cell .ml{display:block}
+.exdesc{align-self:center;min-width:0;overflow-wrap:anywhere}
 .ledger{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 16px;margin:0;font-size:14.5px;line-height:1.4}
 .ledger dt{min-width:0;color:var(--ink-2);overflow-wrap:anywhere}
 .ledger dt .sub{font-size:12px}
@@ -582,6 +603,9 @@ input.search:focus{border-color:var(--accent)}
   .oline{grid-template-columns:minmax(0,1fr) 64px minmax(0,1.2fr) 44px;gap:6px 8px;align-items:end}
   .oline+.oline{padding-top:12px;border-top:1px solid var(--line)}
   .oline>input:first-child{grid-column:1/-1}
+  .exline{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .exline .exdesc{grid-column:1/-1}
+  .exline+.exline{padding-top:10px;border-top:1px solid var(--line)}
   .cell .ml{display:block}
   .grid2.nums,.grid3.nums{grid-template-columns:repeat(2,minmax(0,1fr))}
   .track li{font-size:11px}
