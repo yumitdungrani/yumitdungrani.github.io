@@ -244,7 +244,7 @@ const MAP_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const MAP_LIB = { js: 'vendor/leaflet/leaflet.js?v=1.9.4', css: 'vendor/leaflet/leaflet.css?v=1.9.4' };
 // OpenStreetMap asks every app to say where its requests come from: this sends the app's address only, never the page
 const OSM_REFERRER = 'strict-origin-when-cross-origin';
-const CHAIN_NAMES = /^(the )?(pandora|goldsmiths|h\.? ?samuel|ernest jones|beaverbrooks|warren james|swarovski|mappin (&|and) webb|fraser hart|f\.? ?hinds|michael hill|tiffany|cartier|bulgari|bvlgari|chopard|van cleef|boodles|links of london|thomas sabo|clogau|fields|argento|claire'?s|lovisa|accessorize|astrid (&|and) miyu|monica vinader|missoma|abbott lyon|daisy london|laings|berry'?s|hugh rice|pragnell|david m\.? robinson|watches of switzerland|rolex|omega|tag heuer|chamilia|diamond store|77 diamonds|taylor (&|and) hart|steffans|john greed|t\.? ?h\.? baker)\b/i;
+const CHAIN_NAMES = /^(the )?(pandora|goldsmiths|h\.? ?samuel|ernest jones|beaverbrooks|warren james|swarovski|mappin (&|and) webb|fraser hart|f\.? ?hinds|michael hill|tiffany|cartier|bulgari|bvlgari|chopard|van cleef|boodles|links of london|thomas sabo|clogau|fields|argento|claire'?s|lovisa|accessorize|astrid (&|and) miyu|monica vinader|missoma|abbott lyon|daisy london|laings|berry'?s|hugh rice|pragnell|david m\.? robinson|watches of switzerland|rolex|omega|tag heuer|chamilia|diamond store|77 diamonds|taylor (&|and) hart|steffans|john greed|t\.? ?h\.? baker|(mia by )?tanishq|caratlane|senco|p\.? ?c\.? chandra|b\.? ?c\.? sen jewel\w*|anjali jewel\w*|kalyan jewel\w*|malabar gold|joyalukkas|jos alukkas|giva|melorra|candere|reliance jewels|p\.? ?n\.? gadgil|png jewel\w*|tribhovandas bhimji|tbz|kirtilals|grt jewel\w*|lalithaa|khazana jewel\w*|bhima jewel\w*|manubhai|waman hari pethe|pc jewell?er\w*|chandrani pearls|damas|pure gold jewel\w*)\b/i;
 const SHARED_HOSTS = /(^|\.)(facebook\.com|instagram\.com|linktr\.ee|google\.com|wixsite\.com|business\.site|square\.site|etsy\.com|ebay\.co\.uk|ebay\.com|amazon\.co\.uk|yell\.com|tiktok\.com|x\.com|twitter\.com)$/;
 const SHOWN_STEP = 40;
 // Claude's background look-ups: how often its scheduled check runs, and how many shops it does each time
@@ -1039,7 +1039,7 @@ function remindModal() {
 /* ---------- a client's whole story ---------- */
 function historyOf(b) {
   const ev = []; const add = (at, icon, text) => { if (at) ev.push({ at: String(at), icon, text }); };
-  add(b.createdAt, 'plus', b.source === 'map' ? 'Saved from the showroom map' : b.source === 'research' ? "Saved from Claude's research (sells online)" : b.source === 'import' ? 'Imported from a list' : 'Added');
+  add(b.createdAt, 'plus', b.source === 'map' ? 'Saved from the showroom map' : b.source === 'research' ? (b.type === 'online' ? "Saved from Claude's research (sells online)" : "Saved from Claude's research") : b.source === 'import' ? 'Imported from a list' : 'Added');
   if (b.seqStart) add(`${b.seqStart}T08:00:00`, 'megaphone', `Campaign ${b.seqStart > todayStr() ? 'starts' : 'started'}${b.startedBy ? ` (by ${b.startedBy})` : ''}`);
   const steps = allSteps();
   for (const [sid, x] of Object.entries(b.done || {})) {
@@ -1866,7 +1866,28 @@ function mergeShop(s, r) {
   return m;
 }
 const researchOf = (key) => S.research.get(key) || null;
-const shopsOf = (doc) => { const res = (researchOf(placeKey(doc.country, doc.city)) || {}).results || {}; return (doc.shops || []).map((s) => mergeShop(s, res[s.id])); };
+const markChain = (s) => (s.chain || !CHAIN_NAMES.test(s.name) ? s : { ...s, chain: 1 });
+const shopsOf = (doc) => { const res = (researchOf(placeKey(doc.country, doc.city)) || {}).results || {}; return (doc.shops || []).map((s) => markChain(mergeShop(s, res[s.id]))); };
+// Showrooms Claude's research found that the map is missing (research.more). They are listed and saved like the
+// map's own; without coordinates they have no dot on the map.
+const moreOf = (doc) => {
+  const m = (researchOf(placeKey(doc.country, doc.city)) || {}).more || {}; const txt = (v, n) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n);
+  return Object.entries(m).filter(([, r]) => r && txt(r.name, 120)).map(([id, r]) => {
+    const base = { id: String(id).replace(/[^A-Za-z0-9_.:@+-]/g, '-').slice(0, 80), name: txt(r.name, 120), town: txt(r.town, 80) || doc.city, extra: 1 };
+    for (const k of ['street', 'area']) if (txt(r[k], 120)) base[k] = txt(r[k], 120);
+    if (txt(r.postcode, 12)) base.postcode = txt(r.postcode, 12).toUpperCase();
+    if (Number.isFinite(r.lat) && Number.isFinite(r.lon)) { base.lat = r.lat; base.lon = r.lon; }
+    if (r.chain === true) base.chain = 1;
+    return markChain(mergeShop(base, r));
+  }).sort((a, b) => a.name.localeCompare(b.name));
+};
+// The map's showrooms and then Claude's, leaving out any of Claude's the map has after all (same name, website or phone).
+function allShopsOf(doc) {
+  const map = shopsOf(doc); const names = new Set(map.map((s) => nameKey(s.name)));
+  const sites = new Set(map.map((s) => siteKey(s.website)).filter(Boolean)); const phones = new Set(map.map((s) => phoneKey(s.phone)).filter(Boolean));
+  return [...map, ...moreOf(doc).filter((s) => !names.has(nameKey(s.name)) && !(siteKey(s.website) && sites.has(siteKey(s.website))) && !(phoneKey(s.phone) && phones.has(phoneKey(s.phone))))];
+}
+const onMap = (s) => Number.isFinite(s.lat) && Number.isFinite(s.lon);
 // Online sellers based in the city (D2C brands, Etsy and Instagram shops): no map position, found by Claude's research.
 const onlineOf = (doc) => { const on = (researchOf(placeKey(doc.country, doc.city)) || {}).online || {}; return Object.entries(on).filter(([, r]) => r && String(r.name || '').trim()).map(([id, r]) => ({ ...mergeShop({ id: String(id).replace(/[^A-Za-z0-9_.:@+-]/g, '-').slice(0, 80), name: String(r.name).replace(/\s+/g, ' ').trim().slice(0, 120), town: doc.city }, r), online: 1 })).sort((a, b) => a.name.localeCompare(b.name)); };
 function buyerIndex(country, city) {
@@ -1883,12 +1904,12 @@ function buyerIndex(country, city) {
 const buyerFor = (s, idx) => idx.osm.get(s.id) || idx.name.get(nameKey(s.name)) || (siteKey(s.website) && idx.site.get(siteKey(s.website))) || (phoneKey(s.phone) && idx.phone.get(phoneKey(s.phone))) || null;
 const brandOf = (s) => s.brand || ((s.name.match(CHAIN_NAMES) || [])[0] || s.name).replace(/^the /i, '').trim();
 function showroomReport(doc) {
-  const shops = shopsOf(doc); const idx = buyerIndex(doc.country, doc.city);
+  const shops = allShopsOf(doc); const idx = buyerIndex(doc.country, doc.city);
   const rows = shops.map((s) => ({ s, b: buyerFor(s, idx) }));
   const tally = (list, keyOf) => { const m = new Map(); for (const x of list) { const k = keyOf(x); if (!k) continue; const e = m.get(k) || { label: k, n: 0, names: new Map() }; e.n++; m.set(k, e); if (x.s.area) e.names.set(x.s.area, (e.names.get(x.s.area) || 0) + 1); } return [...m.values()].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'en', { numeric: true })); };
   const areas = tally(rows, (x) => ukDistrict(x.s.postcode) || x.s.area || x.s.town || '').map((e) => { const top = [...e.names.entries()].sort((a, b) => b[1] - a[1])[0]; return { ...e, label: top && top[0] !== e.label ? `${e.label}, ${top[0]}` : e.label }; });
   const chains = rows.filter((x) => x.s.chain); const online = onlineOf(doc).map((s) => ({ s, b: buyerFor(s, idx) }));
-  return { total: shops.length, rows, ind: rows.filter((x) => !x.s.chain), chains, online, mine: [...rows, ...online].filter((x) => x.b), areas, brands: tally(chains, (x) => brandOf(x.s)) };
+  return { total: shops.length, mapTotal: shops.filter((s) => !s.extra).length, more: shops.filter((s) => s.extra).length, rows, ind: rows.filter((x) => !x.s.chain), chains, online, mine: [...rows, ...online].filter((x) => x.b), areas, brands: tally(chains, (x) => brandOf(x.s)) };
 }
 
 async function osmFetch(url, opts = {}, ms = 30000) {
@@ -1911,7 +1932,7 @@ async function locateCity(city, country) {
   return { osmType: String(best.osm_type || ''), osmId: Number(best.osm_id) || 0, lat: Number(best.lat), lon: Number(best.lon), bbox: bb.length === 4 && bb.every(Number.isFinite) ? bb : null };
 }
 function showroomQuery(area) {
-  const pick = (scope) => `nwr["shop"~"^jewel(le)?ry$"]${scope};nwr["craft"="jeweller"]${scope};`;
+  const pick = (scope) => `nwr["shop"~"^(jewel(le)?ry|jewell?er|gold|silver)$"]${scope};nwr["craft"~"^(jewell?er|goldsmith|silversmith)$"]${scope};nwr["shop"~"^(yes|gift|accessories|fashion_accessories|boutique|clothes|fashion|watches|variety_store|antiques|craft|wholesale|general|retail|trade)$"]["name"~"jewel|ornament|alankar|gahana|gehna|swarna|kundan|polki|bullion|diamonds",i]${scope};`;
   const base = area.osmType === 'relation' ? 3600000000 : area.osmType === 'way' ? 2400000000 : 0;
   if (base && area.osmId) return `[out:json][timeout:90];area(id:${base + area.osmId})->.a;(${pick('(area.a)')});out center tags;`;
   const [s, n, w, e] = area.bbox && area.bbox[1] - area.bbox[0] > 0.02 ? area.bbox : [area.lat - 0.09, area.lat + 0.09, area.lon - 0.15, area.lon + 0.15];
@@ -1993,14 +2014,14 @@ function shopWhere(s, doc) {
 async function addShops(key, ids) {
   const doc = S.places.get(key); if (!doc) return 0;
   const idx = buyerIndex(doc.country, doc.city); const want = new Set(ids);
-  const list = [...shopsOf(doc), ...onlineOf(doc)].filter((s) => want.has(s.id) && !buyerFor(s, idx) && !(s.email && isSuppressed(s.email)));
+  const list = [...allShopsOf(doc), ...onlineOf(doc)].filter((s) => want.has(s.id) && !buyerFor(s, idx) && !(s.email && isSuppressed(s.email)));
   if (!list.length) return 0;
   const cid = await cityCampaign(doc.city, doc.country); if (!cid) return 0;
   const at = nowIso();
   const items = list.map((s) => {
     const contact = { person: s.person || '', email: s.email || '', phone: s.phone || '', website: s.website || '', instagram: s.instagram || '', facebook: s.facebook || '' };
-    const notes = s.online ? `Sells online${s.note ? `: ${s.note}` : ''}.\nFound by Claude's research in ${doc.city}.` : `Where: ${shopWhere(s, doc)}\nFound on the showroom map (OpenStreetMap).${s.note ? `\n${s.note}` : ''}`;
-    const b = newBiz({ campaignId: cid, name: s.name, type: s.online ? 'online' : s.chain ? 'chain' : 'independent', city: doc.city, country: doc.country, source: s.online ? 'research' : 'map', labGrown: !!s.labGrown, legalForm: s.legalForm || '', companyNo: s.companyNo || '', notes, contact });
+    const notes = s.online ? `Sells online${s.note ? `: ${s.note}` : ''}.\nFound by Claude's research in ${doc.city}.` : `Where: ${shopWhere(s, doc)}\n${s.extra ? "Found by Claude's research (not on the showroom map)." : 'Found on the showroom map (OpenStreetMap).'}${s.note ? `\n${s.note}` : ''}`;
+    const b = newBiz({ campaignId: cid, name: s.name, type: s.online ? 'online' : s.chain ? 'chain' : 'independent', city: doc.city, country: doc.country, source: s.online || s.extra ? 'research' : 'map', labGrown: !!s.labGrown, legalForm: s.legalForm || '', companyNo: s.companyNo || '', notes, contact });
     return [`m~${key}~${s.id}`.slice(0, 200), { ...b, osm: s.id, ...(s.checked ? { researchAt: at } : {}) }];
   });
   return (await write(() => Data.setMany('businesses', items))) ? items.length : 0;
@@ -2011,8 +2032,8 @@ async function afterScan(key, again) {
   const doc = S.places.get(key); if (!doc) return 0;
   const ids = showroomReport(doc).ind.filter((x) => !x.b && !x.s.closed).map((x) => x.s.id);
   const n = ids.length ? await addShops(key, ids) : 0;
-  const now = nowIso();
-  if (again || (S.loaded.research && !researchOf(key))) await write(() => Data.set('research', key, { city: doc.city, country: doc.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false }));
+  const now = nowIso(); const cur = researchOf(key);
+  if (again || (S.loaded.research && !cur)) await write(() => Data.set('research', key, { city: doc.city, country: doc.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false, more: (cur && cur.more) || {}, moreDone: false }));
   return n;
 }
 // Choosing a city that was searched before (and has no research yet): its showrooms go to Leads and Claude's
@@ -2031,10 +2052,10 @@ async function applyResearch() {
   try {
     for (const [key, rs] of S.research) {
       const doc = S.places.get(key); if (!doc || !rs) continue;
-      const res = rs.results || {}; const on = rs.online || {};
+      const res = rs.results || {}; const on = rs.online || {}; const more = rs.more || {};
       const idx = buyerIndex(doc.country, doc.city); const items = []; const now = nowIso();
-      for (const s of [...shopsOf(doc), ...onlineOf(doc)]) {
-        const r = s.online ? on[s.id] : res[s.id]; if (!r) continue;
+      for (const s of [...allShopsOf(doc), ...onlineOf(doc)]) {
+        const r = s.online ? on[s.id] : s.extra ? more[s.id] : res[s.id]; if (!r) continue;
         const at = String(r.checkedAt || rs.updatedAt || ''); const b = buyerFor(s, idx);
         if (!b || (b.researchAt && at && b.researchAt >= at)) continue;
         const c = contactOf(b); const contact = {};
@@ -2047,7 +2068,8 @@ async function applyResearch() {
         items.push([b.id, patch]);
       }
       if (items.length && !(await write(() => Data.updateMany('businesses', items)))) return;
-      const fresh = onlineOf(doc).filter((s) => !s.closed && !buyerFor(s, buyerIndex(doc.country, doc.city))).map((s) => s.id);
+      const idx2 = buyerIndex(doc.country, doc.city);
+      const fresh = [...onlineOf(doc), ...allShopsOf(doc).filter((s) => s.extra && !s.chain)].filter((s) => !s.closed && !buyerFor(s, idx2)).map((s) => s.id);
       if (fresh.length) await addShops(key, fresh);
     }
   } finally { S.researchBusy = false; }
@@ -2059,23 +2081,28 @@ function markResearchSeen(key) {
   researchSeen.add(key); setTimeout(() => write(() => Data.update('research', key, { seenAt: nowIso() })), 0);
 }
 function researchPanel(key, r) {
-  const rs = researchOf(key); const total = r.ind.length; if (!total && !r.online.length) return '';
-  const done = r.ind.filter((x) => x.s.checked).length; const st = rs ? rs.status : '';
+  const rs = researchOf(key); const map = r.ind.filter((x) => !x.s.extra); const total = map.length;
+  const doc = S.places.get(key) || {}; const city = esc(doc.city || (rs && rs.city) || 'this city');
+  const done = map.filter((x) => x.s.checked).length; const st = rs ? rs.status : '';
   const head = '<h3>Emails and details</h3>'; const k = esc(key);
-  const bar = `<div class="progress" role="progressbar" aria-label="Showrooms checked" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${(total ? done / total * 100 : 0).toFixed(1)}%"></i></div>`;
-  const online = r.online.length ? `, and found ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'}` : '';
+  const bar = total ? `<div class="progress" role="progressbar" aria-label="Showrooms checked" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${(done / total * 100).toFixed(1)}%"></i></div>` : '';
+  const parts = [r.more ? `${r.more} ${total ? 'more ' : ''}${r.more === 1 ? 'showroom' : 'showrooms'} the map is missing` : '', r.online.length ? `${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'}` : ''].filter(Boolean);
+  const found = parts.length ? `found ${listAnd(parts)}` : '';
+  const sparse = r.mapTotal < 40 && placeText(doc.country) !== placeText(UK);
   if (!st) {
     if (!canFind()) return '';
     const unsaved = r.ind.filter((x) => !x.b && !x.s.closed).length;
-    return `<section class="panel research">${head}<p class="muted" style="margin:0">${unsaved ? `The ${unsaved} independent ${unsaved === 1 ? 'showroom goes' : 'showrooms go'} to Leads, and Claude` : 'Claude'} finds each one's website, email, Instagram and owner, and in the UK its company type, and looks for jewellers here that sell online. About ${RESEARCH_BATCH} shops an hour, in the background.</p><div class="actions"><button type="button" class="btn primary" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
+    return `<section class="panel research">${head}<p class="muted" style="margin:0">${unsaved ? `The ${unsaved} independent ${unsaved === 1 ? 'showroom goes' : 'showrooms go'} to Leads, and Claude` : 'Claude'} finds each one's website, email, Instagram and owner, and in the UK its company type. It also finds the showrooms the map is missing, and jewellers here that sell online. About ${RESEARCH_BATCH} shops an hour, in the background.${sparse ? ` The map has only a few of ${city}'s jewellers, so most will come from Claude's research.` : ''}</p><div class="actions"><button type="button" class="btn primary" data-act="research-start" data-key="${k}">${ico('spark')}Find emails and details</button></div></section>`;
   }
   if (st === 'done') {
     const n = (f) => r.ind.filter((x) => x.s.checked && f(x.s)).length; const em = n((s) => s.email), web = n((s) => s.website), lf = n((s) => s.legalForm);
-    return `<section class="panel research">${head}<p style="margin:0">Claude checked all ${total} independent showrooms${online}${rs.finishedAt ? `, finishing ${esc(fmtWhen(rs.finishedAt))}` : ''}: ${em} with an email, ${web} with a website${lf ? `, ${lf} with their company type` : ''}.</p><div class="actions">${moreMenu('research', `<button type="button" class="btn small" data-act="research-again" data-key="${k}">${ico('refresh')}Check them all again</button>`)}</div></section>`;
+    const lead = total ? `Claude checked all ${total} independent showrooms${found ? `, and ${found}` : ''}` : `Claude ${found || 'found no showrooms here that the map is missing'}`;
+    return `<section class="panel research">${head}<p style="margin:0">${lead}${rs.finishedAt ? `, finishing ${esc(fmtWhen(rs.finishedAt))}` : ''}: ${em} with an email, ${web} with a website${lf ? `, ${lf} with their company type` : ''}.</p><div class="actions">${moreMenu('research', `<button type="button" class="btn small" data-act="research-again" data-key="${k}">${ico('refresh')}Check them all again</button>`)}</div></section>`;
   }
-  if (st === 'stopped') return `<section class="panel research">${head}<p style="margin:0">Stopped at ${done} of ${total} showrooms. What Claude found so far stays.</p>${bar}<div class="actions"><button type="button" class="btn" data-act="research-continue" data-key="${k}">${ico('refresh')}Continue</button></div></section>`;
-  return `<section class="panel research">${head}<p style="margin:0">${done ? `Claude has checked ${done} of ${total} showrooms${online}.` : `Claude starts on ${esc(rs.city || 'this city')} within the hour.`}</p>${bar}
-    <p class="hint" style="margin:0">${rs.updatedAt && done ? `Last update ${esc(fmtWhen(rs.updatedAt))}. ` : ''}About ${RESEARCH_BATCH} shops an hour, only for the city you're working on. You can close the app; what Claude finds goes onto the saved shops, and Today tells you when it's done.</p>
+  if (st === 'stopped') return `<section class="panel research">${head}<p style="margin:0">Stopped at ${done} of ${total} showrooms${parts.length ? `, with ${listAnd(parts)} found` : ''}. What Claude found so far stays.</p>${bar}<div class="actions"><button type="button" class="btn" data-act="research-continue" data-key="${k}">${ico('refresh')}Continue</button></div></section>`;
+  const now = done || parts.length ? (total ? `Claude has checked ${done} of ${total} showrooms${found ? `, and ${found}` : ''}.` : `Claude has ${found} so far.`) : `Claude starts on ${city} within the hour.`;
+  return `<section class="panel research">${head}<p style="margin:0">${now}</p>${bar}
+    <p class="hint" style="margin:0">${rs.updatedAt && (done || parts.length) ? `Last update ${esc(fmtWhen(rs.updatedAt))}. ` : ''}About ${RESEARCH_BATCH} shops an hour, only for the city you're working on${sparse ? `, including the showrooms the map is missing` : ''}. You can close the app; what Claude finds goes onto the saved shops, and Today tells you when it's done.</p>
     <div class="actions"><button type="button" class="btn small" data-act="research-stop" data-key="${k}">${ico('stop')}Stop</button></div></section>`;
 }
 function researchBanner() {
@@ -2103,13 +2130,14 @@ function showroomsPdf(doc) {
   const label = (s) => { pdf.text(M, y, s.toUpperCase(), { f: 'B', size: 7.5, sp: 1.2, color: GOLD }); y += 14; };
   top(true);
   pdf.text(M, y, doc.city, { f: 'TB', size: 30, color: NAVY }); y += 20;
-  pdf.text(M, y, `Jewellery showrooms in ${doc.city}, ${doc.country}, from OpenStreetMap on ${day}.`, { size: 9.5, color: MUTED }); y += 20;
+  const intro = pdfWrap(`Jewellery showrooms in ${doc.city}, ${doc.country}, from OpenStreetMap on ${day}${r.more ? `, and ${r.more} more found by Claude's research of public business listings` : ''}.`, 'R', 9.5, CW);
+  intro.forEach((ln, i) => pdf.text(M, y + i * 13, ln, { size: 9.5, color: MUTED })); y += 20 + (intro.length - 1) * 13;
   const figs = [[r.total, 'Showrooms'], [r.ind.length, 'Independent'], [r.chains.length, 'Chains'], [r.mine.length, 'Already your buyers']]; const fw = CW / figs.length;
   pdf.rect(M, y, CW, 56, { fill: SOFT });
   figs.forEach(([n, l], i) => { pdf.text(M + 14 + i * fw, y + 29, String(n), { f: 'TB', size: 21, color: NAVY }); pdf.text(M + 14 + i * fw, y + 44, l, { size: 8, color: MUTED }); });
   y += 76;
   // every shop as a dot, north at the top
-  const pts = r.rows;
+  const pts = r.rows.filter((x) => onMap(x.s));
   if (pts.length > 1) {
     const lats = pts.map((x) => x.s.lat), lons = pts.map((x) => x.s.lon);
     const la0 = Math.min(...lats), la1 = Math.max(...lats), lo0 = Math.min(...lons); const k = Math.cos(((la0 + la1) / 2) * Math.PI / 180);
@@ -2155,7 +2183,7 @@ function showroomsPdf(doc) {
     for (const ln of pdfWrap(r.brands.map((b) => `${b.label} ${b.n}`).join('    ·    '), 'R', 9, CW)) { room(13); pdf.text(M, y, ln, { size: 9, color: INK }); y += 13; }
   }
   y += 16; room(36);
-  for (const ln of pdfWrap('Source: OpenStreetMap contributors (openstreetmap.org/copyright). A shop that is not on OpenStreetMap is missing here, and contact details can be out of date. Postcodes marked on the app as nearby are the nearest postcode to the shop.', 'R', 7.8, CW)) { pdf.text(M, y, ln, { size: 7.8, color: MUTED }); y += 10.5; }
+  for (const ln of pdfWrap(`Source: OpenStreetMap contributors (openstreetmap.org/copyright)${r.more ? ", and Claude's research of public business listings for the shops not on the map" : ''}. A shop that neither has is missing here, and contact details can be out of date. Postcodes marked on the app as nearby are the nearest postcode to the shop.`, 'R', 7.8, CW)) { pdf.text(M, y, ln, { size: 7.8, color: MUTED }); y += 10.5; }
   const n = pdf.pageCount;
   for (let i = 0; i < n; i++) { pdf.onPage(i); pdf.line(M, pdf.H - 44, R, pdf.H - 44, { color: LINE, w: 0.5 }); pdf.text(M, pdf.H - 31, pdfFit(`${company} · Showrooms in ${doc.city} · ${day}`, 'R', 7, CW - 70), { size: 7, color: MUTED }); pdf.text(R, pdf.H - 31, `Page ${i + 1} of ${n}`, { size: 7, color: MUTED, align: 'right' }); }
   return pdf.bytes();
@@ -2592,7 +2620,7 @@ function helloCard(t) {
   const running = [...S.campaigns.values()].filter((c) => inFocus(c) && campaignPhase(c).key === 'running').length;
   let place = row('megaphone', 'Campaigns running', String(running), '#cities');
   if (doc) {
-    const rs = researchOf(placeKey(f.country, f.city)); const n = (doc.shops || []).length;
+    const rs = researchOf(placeKey(f.country, f.city)); const n = allShopsOf(doc).length;
     const res = !rs ? '' : rs.status === 'done' ? ', details found' : rs.status === 'stopped' ? ', details stopped' : ', finding details';
     place = row('store', `Showrooms in ${esc(f.city)}`, `${n} found${res}`, '#showrooms');
   }
@@ -2873,7 +2901,7 @@ function cityButtons(country, small) {
   const n = (c) => allBiz().filter((b) => inFocus(b, { country, city: c })).length;
   return `<div class="cities${small ? ' small' : ''}">${small ? `<button type="button" class="city-btn" data-act="work-on" data-country="${esc(country)}" data-city="" aria-pressed="${!f.city && placeText(f.country) === placeText(country)}"><b>All of ${esc(country)}</b><span class="sub">Every city</span></button>` : ''}${cityOptions(country).map((c) => {
     const d = S.places.get(placeKey(country, c)); const k = n(c);
-    const sub = d ? `${(d.shops || []).length} showrooms` : k ? `${k} ${k === 1 ? 'buyer' : 'buyers'}` : 'Not searched yet';
+    const sub = d ? `${allShopsOf(d).length} showrooms` : k ? `${k} ${k === 1 ? 'buyer' : 'buyers'}` : 'Not searched yet';
     return `<button type="button" class="city-btn" data-act="work-on" data-country="${esc(country)}" data-city="${esc(c)}" aria-pressed="${placeText(f.city) === placeText(c) && placeText(f.country) === placeText(country)}"><b>${esc(c)}</b><span class="sub">${esc(sub)}</span></button>`;
   }).join('')}</div>
   <form class="inline-form" data-form="work-city" data-country="${esc(country)}"><div class="field"><label for="oc-city-${small ? 'm' : 'p'}">Another city</label><input class="input" id="oc-city-${small ? 'm' : 'p'}" data-k="oc.city" value="${esc(fv('oc.city'))}" placeholder="e.g. Leicester" autocomplete="off"></div><button type="submit" class="btn">${small ? 'Work on it' : 'Find showrooms'}</button></form>`;
@@ -2905,15 +2933,15 @@ function showroomsView() {
   const areas = r.areas.slice(0, 8); const amax = Math.max(1, ...areas.map((a) => a.n));
   const fetched = String(doc.fetchedAt || '').slice(0, 10);
   const fresh = [...r.ind, ...r.online].filter((x) => x.b && startable(x.b)).length;
-  return head(`<p>${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}${r.online.length ? `, and ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'} from Claude's research` : ''}.</p>`,
+  return head(`<p>${r.more ? `${r.total} jewellery showrooms: ${r.mapTotal} from OpenStreetMap on ${esc(fmtDate(fetched))} and ${r.more} more found by Claude` : `${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}`}${r.online.length ? `, and ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'} from Claude's research` : ''}.</p>`,
     `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button><button class="btn" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Scanning…' : 'Rescan'}</button></div>`) + `
   <div class="tiles">${tile(r.total, 'Showrooms')}${tile(r.ind.length, 'Independent')}${tile(r.online.length, 'Online')}${tile(r.chains.length, 'Chains')}</div>
   ${fresh ? `<div class="banner plain">${ico('megaphone')}<p><b>${fresh} ${fresh === 1 ? 'shop' : 'shops'} in ${esc(doc.city)} saved and not contacted yet.</b> <button type="button" class="linkish" data-act="camp-city" data-country="${esc(doc.country)}" data-city="${esc(doc.city)}">Start the campaign</button></p></div>` : ''}
   ${busy ? `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(S.find.step)}…</b></p><button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button></div>` : ''}
   ${researchPanel(key, r)}
-  ${r.total ? `<section class="section map-section"><div class="mapbox" id="map-slot" data-key="${esc(key)}"></div>
+  ${r.mapTotal ? `<section class="section map-section"><div class="mapbox" id="map-slot" data-key="${esc(key)}"></div>
     <div class="legend" aria-hidden="true"><span><i class="ind"></i>Not contacted</span><span><i class="camp"></i>In campaign</span><span><i class="mine"></i>Replied</span><span><i class="chain"></i>Chain</span></div>
-    ${sel ? `<div class="list picked">${shopItem(sel, doc, key, true)}</div>` : '<p class="hint">Tap a dot to see the shop.</p>'}</section>` : emptyBox(`OpenStreetMap has no jewellery showrooms in ${esc(doc.city)}. Try a nearby larger town, or ask Claude to search the high street.`, `<button class="btn" data-act="focus-open">${ico('pin')}Change city</button>`)}
+    ${sel ? `<div class="list picked">${shopItem(sel, doc, key, true)}</div>` : '<p class="hint">Tap a dot to see the shop.</p>'}</section>` : emptyBox(`OpenStreetMap has no jewellery showrooms in ${esc(doc.city)}.${r.more ? ` The ${r.more} below were found by Claude.` : " Claude's research above can find them."}`, `<button class="btn" data-act="focus-open">${ico('pin')}Change city</button>`)}
   ${areas.length > 1 ? `<section class="section"><h2>Where they are</h2>${barRows(areas.map((a, i) => ({ name: a.label, share: a.n / amax, top: i === 0, val: `<b>${a.n}</b>` })))}<p class="hint">${placeText(doc.country) === placeText(UK) ? 'By postcode district, with the area most of them name.' : 'By area.'} The busiest streets make the best visit days.</p></section>` : ''}
   ${r.total || r.online.length ? `<section class="section"><div class="sec-head"><h2>The shops</h2>${seg('ptab', tab, [['ind', `Independent ${r.ind.length}`], ['online', `Online ${r.online.length}`], ['chain', `Chains ${r.chains.length}`]])}</div>
     ${tab === 'ind' && toAdd.length ? `<div class="bulk"><span>${toAdd.length} independent ${toAdd.length === 1 ? 'showroom isn\'t' : 'showrooms aren\'t'} saved to Leads yet.</span><button class="btn small primary" data-act="places-add-all" data-key="${esc(key)}">${ico('plus')}Save all ${toAdd.length}</button></div>` : ''}
@@ -2923,13 +2951,13 @@ function showroomsView() {
     ${shown.length ? `<div class="list">${shown.map((x) => shopItem(x, doc, key)).join('')}</div>` : tab === 'online' && !q ? '' : emptyBox(q ? 'No showrooms match.' : 'None here.')}
     ${list.length > shown.length ? `<div><button class="btn" data-act="places-more">Show ${Math.min(SHOWN_STEP, list.length - shown.length)} more of ${list.length - shown.length}</button></div>` : ''}
   </section>` : ''}
-  <p class="hint">Map data © OpenStreetMap contributors. A shop that isn't on OpenStreetMap won't show here; Claude's research adds online sellers.${placeText(doc.country) === placeText(UK) ? ' Postcodes marked “nearby” are the closest postcode to the shop.' : ''}</p>`;
+  <p class="hint">Map data © OpenStreetMap contributors. Claude's research adds the showrooms OpenStreetMap is missing, and online sellers.${placeText(doc.country) === placeText(UK) ? ' Postcodes marked “nearby” are the closest postcode to the shop.' : ''}</p>`;
 }
 function shopItem(x, doc, key, picked) {
   const { s, b } = x; const site = safeUrl(s.website); const tel = String(s.phone || '').replace(/[^\d+]/g, '');
   const where = s.online ? '' : [s.street, s.postcode ? `${s.postcode}${s.near ? ' (nearby)' : ''}` : ''].filter(Boolean).join(', ') || s.area || s.town || '';
-  const extra = `${picked || s.online ? '' : `<button type="button" class="btn small" data-act="places-show" data-id="${esc(s.id)}">${ico('pin')}Show on map</button>`}${s.online ? '' : `<a class="btn small" href="${esc(shopMapsUrl(s, doc))}" target="_blank" rel="noopener">${ico('route')}Directions</a>`}${tel ? `<a class="btn small" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}${site ? `<a class="btn small" href="${esc(site)}" target="_blank" rel="noopener">${ico('ext')}Website</a>` : ''}${igUrl(s.instagram) ? `<a class="btn small" href="${esc(igUrl(s.instagram))}" target="_blank" rel="noopener">${ico('camera')}Instagram</a>` : ''}${picked ? `<button type="button" class="btn small quiet" data-act="places-unsel">Close</button>` : ''}`;
-  const tags = `${b ? stateChip(b) : ''}${s.online ? '<span class="chip accent">Sells online</span>' : ''}${s.labGrown ? '<span class="chip good">Sells lab-grown</span>' : ''}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${s.closed ? '<span class="chip warn">May have closed</span>' : ''}`;
+  const extra = `${picked || s.online || !onMap(s) ? '' : `<button type="button" class="btn small" data-act="places-show" data-id="${esc(s.id)}">${ico('pin')}Show on map</button>`}${s.online ? '' : `<a class="btn small" href="${esc(shopMapsUrl(s, doc))}" target="_blank" rel="noopener">${ico('route')}Directions</a>`}${tel ? `<a class="btn small" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}${site ? `<a class="btn small" href="${esc(site)}" target="_blank" rel="noopener">${ico('ext')}Website</a>` : ''}${igUrl(s.instagram) ? `<a class="btn small" href="${esc(igUrl(s.instagram))}" target="_blank" rel="noopener">${ico('camera')}Instagram</a>` : ''}${picked ? `<button type="button" class="btn small quiet" data-act="places-unsel">Close</button>` : ''}`;
+  const tags = `${b ? stateChip(b) : ''}${s.online ? '<span class="chip accent">Sells online</span>' : ''}${s.extra ? '<span class="chip">Found by Claude</span>' : ''}${s.labGrown ? '<span class="chip good">Sells lab-grown</span>' : ''}${s.chain ? '<span class="chip">Chain</span>' : ''}${s.workshop ? '<span class="chip">Workshop</span>' : ''}${s.closed ? '<span class="chip warn">May have closed</span>' : ''}`;
   return `<div class="item${b ? ' tap corner' : ''}"><div class="stack">
     <div class="title-row">${b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(s.name)}</button>` : `<b>${esc(s.name)}</b>`}</div>
     <div class="meta">${where ? `<span>${esc(where)}</span>` : ''}${s.phone ? `<span class="mono">${esc(s.phone)}</span>` : ''}${site ? `<span>${esc(cleanDomain(site))}</span>` : ''}${s.email ? `<span class="mono sel">${esc(s.email)}</span>` : ''}</div>
@@ -4356,7 +4384,7 @@ async function onClick(e) {
     }
     case 'research-again': {
       const k = el.dataset.key; const d = S.places.get(k); if (!d) break; const now = nowIso();
-      if (await write(() => Data.set('research', k, { city: d.city, country: d.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false }))) toast(`Claude will check every shop in ${d.city} again, starting within the hour`);
+      if (await write(() => Data.set('research', k, { city: d.city, country: d.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false, more: (researchOf(k) || {}).more || {}, moreDone: false }))) toast(`Claude will check every shop in ${d.city} again, starting within the hour`);
       break;
     }
     case 'research-stop': if (await write(() => Data.update('research', el.dataset.key, { status: 'stopped', updatedAt: nowIso() }))) toast('Stopped. What Claude found so far stays.'); break;
@@ -5155,6 +5183,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { S, Data, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
+window.__facet = { S, Data, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
 init();
 })();
