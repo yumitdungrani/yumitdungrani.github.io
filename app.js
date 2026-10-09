@@ -473,7 +473,7 @@ async function setFocus(next) {
   Object.assign(S.ui, { placeSel: '', placePan: '', placesShown: SHOWN_STEP, menu: '' }); S.filters.places.q = '';
   Object.assign(S.filters.buyers, { country: '', city: '' }); Object.assign(S.filters.reports, { country: '', city: '' }); S.filters.calendar.country = null;
   const ok = await write(() => saveSettings({ focus: f }));
-  if (ok) toast(`Working on ${focusName(f)}`);
+  if (ok) { toast(`Working on ${focusName(f)}`); queueResearch(); }
   return ok;
 }
 
@@ -2043,7 +2043,8 @@ function startCityResearch(country, city) {
   if (!city || !canFind() || !S.places.get(k) || !S.loaded.research || researchOf(k)) return;
   afterScan(k, false).then((n) => { if (researchOf(k)) toast(n ? `Working on ${city}: ${n} ${n === 1 ? 'showroom' : 'showrooms'} saved to Leads. Claude is finding their details.` : `Working on ${city}. Claude is finding the showrooms' details.`); });
 }
-// New findings fill the empty details of shops already on your list; nothing you typed is overwritten.
+// New findings fill the empty details of shops already on your list; nothing you typed is overwritten. Only the
+// city or country chosen in Working on is touched; findings for anywhere else wait until it is chosen.
 let researchTimer = 0;
 function queueResearch() { if (!researchTimer) researchTimer = setTimeout(() => { researchTimer = 0; applyResearch(); }, 500); }
 async function applyResearch() {
@@ -2051,7 +2052,7 @@ async function applyResearch() {
   S.researchBusy = true;
   try {
     for (const [key, rs] of S.research) {
-      const doc = S.places.get(key); if (!doc || !rs) continue;
+      const doc = S.places.get(key); if (!doc || !rs || !inFocus(doc)) continue;
       const res = rs.results || {}; const on = rs.online || {}; const more = rs.more || {};
       const idx = buyerIndex(doc.country, doc.city); const items = []; const now = nowIso();
       for (const s of [...allShopsOf(doc), ...onlineOf(doc)]) {
