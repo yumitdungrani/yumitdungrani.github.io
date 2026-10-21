@@ -238,7 +238,11 @@ const AUTO_REPLY = /^\s*(auto(matic)?[\s-]*(reply|response)|out of (the )?office
 const UK_ROUTE = ['London', 'Birmingham', 'Manchester', 'Leeds', 'Edinburgh', 'Glasgow'];
 // Showrooms: OpenStreetMap's free services, called straight from the phone app (the copy inside Claude can't reach them)
 const GEOCODER = 'https://nominatim.openstreetmap.org/search';
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+// Four public OpenStreetMap map servers, asked a few seconds apart; the first good answer wins.
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const OVERPASS_NEXT = [6000, 10000, 10000];
+// OpenStreetMap's other search service: finds a city when Nominatim is busy, and gives quick first results
+const PHOTON = 'https://photon.komoot.io';
 const POSTCODES_API = 'https://api.postcodes.io/postcodes';
 const MAP_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const MAP_LIB = { js: 'vendor/leaflet/leaflet.js?v=1.9.4', css: 'vendor/leaflet/leaflet.css?v=1.9.4' };
@@ -2288,42 +2292,110 @@ function showroomReport(doc) {
   return { total: shops.length, mapTotal: shops.filter((s) => !s.extra).length, more: shops.filter((s) => s.extra).length, rows, ind: rows.filter((x) => !x.s.chain), chains, online, mine: [...rows, ...online].filter((x) => x.b), areas, brands: tally(chains, (x) => brandOf(x.s)) };
 }
 
-async function osmFetch(url, opts = {}, ms = 30000) {
+async function osmFetch(url, opts = {}, ms = 30000, outer = null) {
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), ms);
-  const stop = S.find.ctl; const onStop = () => ctl.abort(); if (stop) stop.signal.addEventListener('abort', onStop);
+  const stop = S.find.ctl; const onStop = () => ctl.abort();
+  if (stop) stop.signal.addEventListener('abort', onStop); if (outer) outer.addEventListener('abort', onStop);
   try {
     const res = await fetch(url, { ...opts, signal: ctl.signal, referrerPolicy: OSM_REFERRER, credentials: 'omit', cache: 'no-store' });
     if (!res.ok) throw { code: res.status === 429 || res.status === 504 ? 'busy' : 'unavailable', status: res.status };
     return await res.json();
-  } catch (e) { if (stop && stop.signal.aborted) throw { code: 'stopped' }; if (e && e.code) throw e; throw { code: navigator.onLine === false ? 'offline' : 'unavailable' }; }
-  finally { clearTimeout(timer); if (stop) stop.signal.removeEventListener('abort', onStop); }
+  } catch (e) {
+    if (stop && stop.signal.aborted) throw { code: 'stopped' }; if (outer && outer.aborted) throw { code: 'dropped' };
+    if (e && e.code) throw e; throw { code: navigator.onLine === false ? 'offline' : 'unavailable' };
+  } finally { clearTimeout(timer); if (stop) stop.signal.removeEventListener('abort', onStop); if (outer) outer.removeEventListener('abort', onStop); }
 }
 async function locateCity(city, country) {
-  const ask = (params) => osmFetch(`${GEOCODER}?${new URLSearchParams({ ...params, format: 'jsonv2', limit: '5', 'accept-language': 'en' })}`);
-  let list = await ask({ city, country });
-  if (!Array.isArray(list) || !list.length) list = await ask({ q: `${city}, ${country}` });
-  if (!Array.isArray(list) || !list.length) throw { code: 'not_found' };
-  const best = list.find((x) => x.osm_type === 'relation') || list[0];
-  const bb = (best.boundingbox || []).map(Number);
-  return { osmType: String(best.osm_type || ''), osmId: Number(best.osm_id) || 0, lat: Number(best.lat), lon: Number(best.lon), bbox: bb.length === 4 && bb.every(Number.isFinite) ? bb : null };
+  const ask = (params) => osmFetch(`${GEOCODER}?${new URLSearchParams({ ...params, format: 'jsonv2', limit: '5', 'accept-language': 'en' })}`, {}, 12000);
+  let list = null; let err = null;
+  try { list = await ask({ city, country }); if (!Array.isArray(list) || !list.length) list = await ask({ q: `${city}, ${country}` }); }
+  catch (e) { if (e && e.code === 'stopped') throw e; err = e; }
+  if (Array.isArray(list) && list.length) {
+    const best = list.find((x) => x.osm_type === 'relation') || list[0];
+    const bb = (best.boundingbox || []).map(Number);
+    return { osmType: String(best.osm_type || ''), osmId: Number(best.osm_id) || 0, lat: Number(best.lat), lon: Number(best.lon), bbox: bb.length === 4 && bb.every(Number.isFinite) ? bb : null };
+  }
+  let ph = null;
+  try { ph = await photonCity(city, country); } catch (e) { if (e && e.code === 'stopped') throw e; }
+  if (ph) return ph;
+  throw err || { code: 'not_found' };
+}
+// Photon finds the city when Nominatim is busy: a place or a boundary in the right country
+async function photonCity(city, country) {
+  const r = await osmFetch(`${PHOTON}/api/?${new URLSearchParams({ q: `${city}, ${country}`, limit: '8', lang: 'en' })}`, {}, 10000);
+  const want = placeText(country);
+  const hit = ((r && r.features) || []).find((f) => { const p = (f && f.properties) || {}; const c = placeText(p.country); return (p.osm_key === 'place' || (p.osm_key === 'boundary' && p.osm_value === 'administrative')) && (!c || c === want || c.includes(want) || want.includes(c)); });
+  if (!hit) return null;
+  const p = hit.properties; const [lon, lat] = (hit.geometry && hit.geometry.coordinates) || []; const ex = Array.isArray(p.extent) && p.extent.length === 4 ? p.extent.map(Number) : null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { osmType: { R: 'relation', W: 'way', N: 'node' }[p.osm_type] || 'node', osmId: Number(p.osm_id) || 0, lat, lon, bbox: ex && ex.every(Number.isFinite) ? [ex[3], ex[1], ex[0], ex[2]] : null };
+}
+// The box to search when there is no city boundary to search inside: [south, north, west, east]
+const boxOf = (area) => (area.bbox && area.bbox[1] - area.bbox[0] > 0.02 ? area.bbox : [area.lat - 0.09, area.lat + 0.09, area.lon - 0.15, area.lon + 0.15]);
+// A Nominatim or Photon search result in the same shape as a map server's element, so shopFrom reads all three
+function nominatimEl(x) {
+  const a = x.address || {}; const t = { ...(x.extratags || {}) }; t.name = x.name || '';
+  if (x.category) t[x.category] = x.type;
+  if (a.road || a.pedestrian) t['addr:street'] = a.road || a.pedestrian; if (a.house_number) t['addr:housenumber'] = a.house_number; if (a.postcode) t['addr:postcode'] = a.postcode;
+  const sub = a.suburb || a.neighbourhood || a.quarter || a.city_district; if (sub) t['addr:suburb'] = sub;
+  const town = a.city || a.town || a.village || a.municipality; if (town) t['addr:city'] = town;
+  return { type: x.osm_type, id: x.osm_id, lat: Number(x.lat), lon: Number(x.lon), tags: t };
+}
+function photonEl(f) {
+  const p = (f && f.properties) || {}; const c = (f && f.geometry && f.geometry.coordinates) || []; const t = { name: p.name || '' };
+  if (p.osm_key) t[p.osm_key] = p.osm_value;
+  if (p.street) t['addr:street'] = p.street; if (p.housenumber) t['addr:housenumber'] = p.housenumber; if (p.postcode) t['addr:postcode'] = p.postcode;
+  if (p.district || p.locality) t['addr:suburb'] = p.district || p.locality; if (p.city) t['addr:city'] = p.city;
+  return { type: { N: 'node', W: 'way', R: 'relation' }[p.osm_type] || 'node', id: p.osm_id, lat: Number(c[1]), lon: Number(c[0]), tags: t };
+}
+// Quick first answers while the map servers work: Photon's jewellery shops around the centre, and Nominatim's
+// (a second apart, as Nominatim asks). Only shops whose address is in the city itself are kept.
+async function quickShops(area, city, onFound, signal) {
+  const [s, n, w, e] = boxOf(area); const want = placeText(city); const found = [];
+  const add = (els) => { for (const el of els) { if (placeText((el.tags || {})['addr:city']) !== want) continue; const x = shopFrom(el); if (x) found.push(x); } if (onFound && found.length) onFound(dedupeShops(found).length); };
+  const km = Math.round(Math.min(25, Math.max(3, metres({ lat: s, lon: w }, { lat: n, lon: e }) / 2000)));
+  const photon = async () => { const r = await osmFetch(`${PHOTON}/reverse?${new URLSearchParams({ lat: String(area.lat), lon: String(area.lon), radius: String(km), limit: '50', lang: 'en', osm_tag: 'shop:jewelry' })}`, {}, 12000, signal); add(((r && r.features) || []).map(photonEl)); };
+  const nominatim = async (q) => { const list = await osmFetch(`${GEOCODER}?${new URLSearchParams({ q, format: 'jsonv2', limit: '40', viewbox: `${w},${n},${e},${s}`, bounded: '1', addressdetails: '1', extratags: '1', 'accept-language': 'en' })}`, {}, 12000, signal); add((Array.isArray(list) ? list : []).filter((x) => ['shop', 'craft'].includes(x.category)).map(nominatimEl)); };
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  await Promise.allSettled([photon(), (async () => { await pause(1100); if (signal && signal.aborted) return; await nominatim('jewelry shop'); await pause(1100); if (signal && signal.aborted) return; await nominatim('jeweller'); })()]);
+  return dedupeShops(found);
 }
 function showroomQuery(area) {
-  const pick = (scope) => `nwr["shop"~"^(jewel(le)?ry|jewell?er|gold|silver)$"]${scope};nwr["craft"~"^(jewell?er|goldsmith|silversmith)$"]${scope};nwr["shop"~"^(yes|gift|accessories|fashion_accessories|boutique|clothes|fashion|watches|variety_store|antiques|craft|wholesale|general|retail|trade)$"]["name"~"jewel|ornament|alankar|gahana|gehna|swarna|kundan|polki|bullion|diamonds",i]${scope};`;
+  // gift shops, boutiques and the like whose name says jewellery, in English, Indian languages, French, Spanish, Italian, German, Dutch, Portuguese and Turkish
+  const names = 'jewel|ornament|alankar|gahana|gehna|swarna|kundan|polki|bullion|diamonds|zewar|zevar|bijou|joaill|joyer|gioiell|schmuck|juwel|sieraad|joalh|ourives|kuyum';
+  const pick = (scope) => `nwr["shop"~"^(jewel(le)?ry|jewell?er|gold|silver)$"]${scope};nwr["craft"~"^(jewell?er|goldsmith|silversmith)$"]${scope};nwr["shop"~"^(yes|gift|accessories|fashion_accessories|boutique|clothes|fashion|watches|variety_store|antiques|craft|wholesale|general|retail|trade)$"]["name"~"${names}",i]${scope};`;
   const base = area.osmType === 'relation' ? 3600000000 : area.osmType === 'way' ? 2400000000 : 0;
-  if (base && area.osmId) return `[out:json][timeout:90];area(id:${base + area.osmId})->.a;(${pick('(area.a)')});out center tags;`;
-  const [s, n, w, e] = area.bbox && area.bbox[1] - area.bbox[0] > 0.02 ? area.bbox : [area.lat - 0.09, area.lat + 0.09, area.lon - 0.15, area.lon + 0.15];
-  return `[out:json][timeout:90];(${pick(`(${s},${w},${n},${e})`)});out center tags;`;
+  if (base && area.osmId) return `[out:json][timeout:45];area(id:${base + area.osmId})->.a;(${pick('(area.a)')});out tags center qt;`;
+  const [s, n, w, e] = boxOf(area);
+  return `[out:json][timeout:45];(${pick(`(${s},${w},${n},${e})`)});out tags center qt;`;
 }
-async function overpass(query) {
-  let last = null;
-  for (const url of OVERPASS) {
-    try {
-      const data = await osmFetch(url, { method: 'POST', body: new URLSearchParams({ data: query }) }, 100000);
-      if (data && Array.isArray(data.elements) && (data.elements.length || !/error/i.test(String(data.remark || '')))) return data;
-      last = { code: 'busy' };
-    } catch (e) { if (e && e.code === 'stopped') throw e; last = e; }
-  }
-  throw last || { code: 'unavailable' };
+function overpass(query, onTry) {
+  return new Promise((resolve, reject) => {
+    let next = 0, running = 0, done = false, last = null, partial = null, hedge = 0, deadline = 0;
+    const ctls = []; const stop = S.find.ctl;
+    const end = () => { done = true; clearTimeout(hedge); clearTimeout(deadline); ctls.forEach((c) => c.abort()); if (stop) stop.signal.removeEventListener('abort', onStop); };
+    const win = (d) => { if (!done) { end(); resolve(d); } };
+    // a server that ran out of time can still have sent most of the shops: better than nothing
+    const lose = (e) => { if (done) return; end(); if (partial && !(e && e.code === 'stopped')) resolve({ ...partial, partial: true }); else reject(e); };
+    const onStop = () => lose({ code: 'stopped' });
+    if (stop) stop.signal.addEventListener('abort', onStop);
+    const failed = (e) => { running--; if (e) last = e; if (done) return; if (next < OVERPASS.length) launch(); else if (!running) lose(last || { code: 'unavailable' }); };
+    const launch = () => {
+      if (done || next >= OVERPASS.length) return;
+      const url = OVERPASS[next++]; running++; const ctl = new AbortController(); ctls.push(ctl);
+      if (onTry) onTry(next);
+      clearTimeout(hedge); if (next < OVERPASS.length) hedge = setTimeout(launch, OVERPASS_NEXT[next - 1] || 10000);
+      osmFetch(url, { method: 'POST', body: new URLSearchParams({ data: query }) }, 50000, ctl.signal).then((d) => {
+        if (done) return;
+        const bad = /runtime error|timed out|out of memory|rate_limited/i.test(String((d && d.remark) || ''));
+        if (d && Array.isArray(d.elements) && !bad) { running--; win(d); return; }
+        if (d && Array.isArray(d.elements) && d.elements.length && (!partial || d.elements.length > partial.elements.length)) partial = d;
+        failed({ code: 'busy' });
+      }, (e) => { if (e && e.code === 'stopped') { running--; lose(e); return; } failed(e); });
+    };
+    deadline = setTimeout(() => lose(last || { code: 'busy' }), 80000);
+    launch();
+  });
 }
 // UK shops without a postcode get the nearest one, so visits can group them by area
 async function fillPostcodes(shops) {
@@ -2343,39 +2415,59 @@ function findError(e, city) {
   if (c === 'busy') return 'The map service is busy. Try again in a minute.';
   return "Couldn't reach the map service. Try again in a minute.";
 }
-async function findShowrooms(country, city, force) {
-  const key = placeKey(country, city);
-  if (!canFind() || S.find.busy || (!force && S.places.get(key))) return false;
+async function findShowrooms(country, city, force, rescan) {
+  const key = placeKey(country, city); const have = S.places.get(key);
+  if (!canFind() || S.find.busy || (!force && have && !have.partial)) return false;
   S.findTried.add(key);
   const ctl = new AbortController(); const halt = () => { if (ctl.signal.aborted) throw { code: 'stopped' }; };
-  S.find = { key, busy: true, step: `Finding ${city} on the map`, error: '', ctl }; schedule();
-  let ok = false;
+  const me = { key, busy: true, step: `Finding ${city} on the map`, note: '', error: '', ctl, startedAt: Date.now() }; S.find = me; schedule();
+  const note = (k, v) => { me[k] = v; me.note = [me.servers, me.quick].filter(Boolean).join('\n'); schedule(); };
+  const asking = (i) => note('servers', `Asking map server ${i} of ${OVERPASS.length}`);
+  const qctl = new AbortController(); let ok = false; let located = false;
   try {
-    const area = await locateCity(city, country); halt();
-    S.find.step = `Collecting the jewellery showrooms in ${city}`; schedule();
-    let data = await overpass(showroomQuery(area)); halt();
-    if (!data.elements.length && area.osmId && area.bbox) { data = await overpass(showroomQuery({ ...area, osmType: 'box' })); halt(); }
-    const shops = dedupeShops(data.elements.map(shopFrom).filter(Boolean)).slice(0, 2500);
-    if (placeText(country) === placeText(UK) && shops.some((s) => !s.postcode)) { S.find.step = 'Adding postcodes'; schedule(); await fillPostcodes(shops); halt(); }
-    const doc = { city, country, fetchedAt: nowIso(), source: 'OpenStreetMap', area: { osmType: area.osmType, osmId: area.osmId, lat: area.lat, lon: area.lon, bbox: area.bbox }, shops };
+    const area = await locateCity(city, country); halt(); located = true;
+    // Claude's research starts with the search, so it never waits on the map
+    if (S.loaded.research && !researchOf(key)) requestResearch(key, city, country);
+    me.step = `Collecting the jewellery showrooms in ${city}`; schedule();
+    const quick = quickShops(area, city, (n) => note('quick', `${n} found so far by the quick search`), qctl.signal).catch(() => []);
+    let data = null; let mapError = null;
+    try {
+      data = await overpass(showroomQuery(area), asking); halt();
+      if (!data.elements.length && area.osmId && area.bbox) { data = await overpass(showroomQuery({ ...area, osmType: 'box' }), asking); halt(); }
+    } catch (e) { if (e && e.code === 'stopped') throw e; mapError = e; }
+    let shops = data ? dedupeShops(data.elements.map(shopFrom).filter(Boolean)) : [];
+    const partial = !data || !!data.partial;
+    if (partial) { shops = dedupeShops([...shops, ...(await quick)]); halt(); } else qctl.abort();
+    // with nothing at all from the map, an empty list is still saved (unless the phone is offline), so what Claude finds shows up
+    if (!data && !shops.length && (!mapError || mapError.code === 'offline')) throw mapError || { code: 'unavailable' };
+    shops = shops.slice(0, 2500);
+    if (placeText(country) === placeText(UK) && shops.some((s) => !s.postcode)) { me.step = 'Adding postcodes'; schedule(); await fillPostcodes(shops); halt(); }
+    const doc = { city, country, fetchedAt: nowIso(), source: partial ? 'OpenStreetMap quick search' : 'OpenStreetMap', ...(partial ? { partial: true } : {}), area: { osmType: area.osmType, osmId: area.osmId, lat: area.lat, lon: area.lon, bbox: area.bbox }, shops };
     S.find = { key: '', busy: false, step: '', error: '' };
     ok = await write(() => Data.set('places', key, doc));
     if (ok) {
       Object.assign(S.ui, { placeSel: '', placePan: '', placesShown: SHOWN_STEP });
-      const saved = await afterScan(key, !!force);
-      toast(shops.length ? `${shops.length} showrooms found in ${city}${saved ? `; ${saved} saved to Leads` : ''}. Claude is finding their details.` : `No showrooms on the map in ${city}`);
+      const saved = await afterScan(key, !!rescan); const n = shops.length;
+      toast(partial && !n ? `The map servers were busy and the quick search found nothing. The app tries again next time; Claude is looking for showrooms meanwhile.` : partial ? `The map servers were busy, so ${n} ${n === 1 ? 'showroom' : 'showrooms'} came from the quick search${saved ? `; ${saved} saved to Leads` : ''}. The app tries the full map again next time.`
+        : n ? `${n} showrooms found in ${city}${saved ? `; ${saved} saved to Leads` : ''}. Claude is finding their details.` : `No showrooms on the map in ${city}. Claude is looking for them.`);
     }
   } catch (e) {
+    qctl.abort();
+    if (e && e.code === 'stopped' && me.resume) { S.find = { key: '', busy: false, step: '', error: '' }; setTimeout(() => findShowrooms(country, city, true, rescan), 0); return false; }
+    // the map servers are down, not the city unknown: Claude's research can still start
+    if (e && e.code !== 'stopped' && e.code !== 'not_found' && !located && S.loaded.research && !researchOf(key)) requestResearch(key, city, country);
     S.find = e && e.code === 'stopped' ? { key, busy: false, step: '', error: '', stopped: true } : { key, busy: false, step: '', error: findError(e, city) };
   }
   schedule();
   return ok;
 }
 function autoFind(f) {
-  const key = placeKey(f.country, f.city);
-  if (!canFind() || !S.loaded.places || S.find.busy || S.findTried.has(key) || S.places.get(key)) return;
-  S.findTried.add(key); setTimeout(() => findShowrooms(f.country, f.city), 0);
+  const key = placeKey(f.country, f.city); const doc = S.places.get(key);
+  if (!canFind() || !S.loaded.places || S.find.busy || S.findTried.has(key) || (doc && !doc.partial)) return;
+  S.findTried.add(key); setTimeout(() => findShowrooms(f.country, f.city, !!doc), 0);
 }
+// A search left running when the phone went to sleep starts again when the app comes back.
+function resumeFind() { const f = S.find; if (f && f.busy && f.ctl && f.startedAt && Date.now() - f.startedAt > 20000) { f.resume = true; f.ctl.abort(); } }
 async function cityCampaign(city, country) {
   const have = [...S.campaigns.values()].find((c) => c.kind !== 'fair' && inFocus(c, { city, country }));
   if (have) return have.id;
@@ -2402,14 +2494,18 @@ async function addShops(key, ids) {
   });
   return (await write(() => Data.setMany('businesses', items))) ? items.length : 0;
 }
+function requestResearch(key, city, country, keepMore) {
+  const now = nowIso(); const cur = researchOf(key);
+  return write(() => Data.set('research', key, { city, country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false, more: (keepMore && cur && cur.more) || {}, moreDone: false }));
+}
 // After a scan: the independent showrooms are saved for Leads, and Claude's research starts for this city.
 // A rescan starts the research over, so every shop is checked again.
 async function afterScan(key, again) {
   const doc = S.places.get(key); if (!doc) return 0;
   const ids = showroomReport(doc).ind.filter((x) => !x.b && !x.s.closed).map((x) => x.s.id);
   const n = ids.length ? await addShops(key, ids) : 0;
-  const now = nowIso(); const cur = researchOf(key);
-  if (again || (S.loaded.research && !cur)) await write(() => Data.set('research', key, { city: doc.city, country: doc.country, status: 'queued', requestedAt: now, updatedAt: now, results: {}, online: {}, onlineDone: false, more: (cur && cur.more) || {}, moreDone: false }));
+  const cur = researchOf(key);
+  if (again || (S.loaded.research && !cur)) await requestResearch(key, doc.city, doc.country, true);
   return n;
 }
 // Choosing a city that was searched before (and has no research yet): its showrooms go to Leads and Claude's
@@ -3293,6 +3389,9 @@ function countryButtons() {
   const list = focusCountries().map((c) => [c, n(c)]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return `<div class="cities">${list.map(([c, k]) => `<button type="button" class="city-btn" data-act="work-on" data-country="${esc(c)}" data-city=""><b>${esc(c)}</b><span class="sub">${k ? `${k} ${k === 1 ? 'buyer' : 'buyers'}` : 'No buyers yet'}</span></button>`).join('')}</div>`;
 }
+function findingPanel(text, busy) {
+  return `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(text)}…</b><br><span class="sub">${esc((busy && S.find.note) || 'Usually under half a minute.').replace(/\n/g, '<br>')}</span></p>${busy ? `<button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button>` : ''}</div>`;
+}
 function showroomsView() {
   const f = focusNow(); const pick = placeSelect();
   if (!f.country) return `${pick}<header class="head"><div><h1>Choose a country</h1><p>Pick a country, then a city. The app finds every jewellery showroom there, shows them on a map and makes a short report.</p></div></header>${countryButtons()}`;
@@ -3304,7 +3403,7 @@ function showroomsView() {
     if (!busy && S.find.error && S.find.key === key) return head(`<p>${esc(S.find.error)}</p>`, `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Try again</button></div>`);
     if (!busy && S.find.stopped && S.find.key === key) return head('<p>Search stopped. Nothing was saved.</p>', `<div class="actions"><button class="btn primary" data-act="places-retry">${ico('refresh')}Search again</button></div>`);
     autoFind(f);
-    return head('<p>Every jewellery showroom in the city, on a map, with a short report.</p>') + `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(busy ? S.find.step : `Looking for showrooms in ${f.city}`)}…</b><br><span class="sub">This takes a few seconds, longer for London.</span></p>${busy ? `<button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button>` : ''}</div>`;
+    return head('<p>Every jewellery showroom in the city, on a map, with a short report.</p>') + findingPanel(busy ? S.find.step : `Looking for showrooms in ${f.city}`, busy);
   }
   const r = showroomReport(doc); const pf = S.filters.places; const q = pf.q.trim().toLowerCase();
   const tab = ['ind', 'online', 'chain'].includes(pf.tab) ? pf.tab : 'ind';
@@ -3315,11 +3414,12 @@ function showroomsView() {
   const areas = r.areas.slice(0, 8); const amax = Math.max(1, ...areas.map((a) => a.n));
   const fetched = String(doc.fetchedAt || '').slice(0, 10);
   const fresh = [...r.ind, ...r.online].filter((x) => x.b && startable(x.b)).length;
-  return head(`<p>${r.more ? `${r.total} jewellery showrooms: ${r.mapTotal} from OpenStreetMap on ${esc(fmtDate(fetched))} and ${r.more} more found by Claude` : `${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap on ${esc(fmtDate(fetched))}`}${r.online.length ? `, and ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'} from Claude's research` : ''}.</p>`,
+  if (doc.partial) autoFind(f);
+  return head(`<p>${r.more ? `${r.total} jewellery showrooms: ${r.mapTotal} from OpenStreetMap on ${esc(fmtDate(fetched))} and ${r.more} more found by Claude` : `${r.total} jewellery ${r.total === 1 ? 'showroom' : 'showrooms'}, from OpenStreetMap${doc.partial ? "'s quick search" : ''} on ${esc(fmtDate(fetched))}`}${r.online.length ? `, and ${r.online.length} online ${r.online.length === 1 ? 'seller' : 'sellers'} from Claude's research` : ''}.</p>`,
     `<div class="actions"><button class="btn primary" data-act="places-share" data-key="${esc(key)}">${ico('share')}Share report</button><button class="btn" data-act="places-refresh" data-key="${esc(key)}" ${busy ? 'disabled' : ''}>${ico('refresh')}${busy ? 'Scanning…' : 'Rescan'}</button></div>`) + `
   <div class="tiles">${tile(r.total, 'Showrooms')}${tile(r.ind.length, 'Independent')}${tile(r.online.length, 'Online')}${tile(r.chains.length, 'Chains')}</div>
   ${fresh ? `<div class="banner plain">${ico('megaphone')}<p><b>${fresh} ${fresh === 1 ? 'shop' : 'shops'} in ${esc(doc.city)} saved and not contacted yet.</b> <button type="button" class="linkish" data-act="camp-city" data-country="${esc(doc.country)}" data-city="${esc(doc.city)}">Start the campaign</button></p></div>` : ''}
-  ${busy ? `<div class="finding" role="status"><svg class="gemspin" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5h14l6 7-13 15L3 12z"/><path d="M3 12h26M12.5 5 10 12l6 15 6-15-2.5-7M10 12l6-7 6 7"/></svg><p><b>${esc(S.find.step)}…</b></p><button type="button" class="btn small" data-act="find-stop">${ico('stop')}Stop</button></div>` : ''}
+  ${busy ? findingPanel(S.find.step, true) : doc.partial ? `<div class="banner plain">${ico('alert')}<p><b>The map servers were busy, so this list is from the quick search.</b> <button type="button" class="linkish" data-act="places-retry">Search the full map</button></p></div>` : ''}
   ${researchPanel(key, r)}
   ${r.mapTotal ? `<section class="section map-section"><div class="mapbox" id="map-slot" data-key="${esc(key)}"></div>
     <div class="legend" aria-hidden="true"><span><i class="ind"></i>Not contacted</span><span><i class="camp"></i>In campaign</span><span><i class="mine"></i>Replied</span><span><i class="chain"></i>Chain</span></div>
@@ -4899,6 +4999,7 @@ async function onClick(e) {
     case 'jump': { const t = document.getElementById(el.dataset.target); if (t) t.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); break; }
     case 'work-on': {
       const city = el.dataset.city || '';
+      if (city && S.loaded.places) findShowrooms(el.dataset.country || '', city);
       if (await setFocus({ country: el.dataset.country || '', city })) {
         if (S.layer && S.layer.kind === 'focus') { S.layer = null; S.form = {}; }
         if (city && location.hash !== '#showrooms') location.hash = '#showrooms'; else render();
@@ -4922,7 +5023,7 @@ async function onClick(e) {
     case 'research-stop': if (await write(() => Data.update('research', el.dataset.key, { status: 'stopped', updatedAt: nowIso() }))) toast('Stopped. What Claude found so far stays.'); break;
     case 'research-continue': if (await write(() => Data.update('research', el.dataset.key, { status: 'queued', updatedAt: nowIso() }))) toast('Claude will carry on within the hour'); break;
     case 'places-retry': { const f = focusNow(); if (f.city) findShowrooms(f.country, f.city, true); break; }
-    case 'places-refresh': { const d = S.places.get(el.dataset.key); if (d) { toast(`Rescanning ${d.city}: the map now, then Claude checks every shop again`); findShowrooms(d.country, d.city, true); } break; }
+    case 'places-refresh': { const d = S.places.get(el.dataset.key); if (d) { toast(`Rescanning ${d.city}: the map now, then Claude checks every shop again`); findShowrooms(d.country, d.city, true, true); } break; }
     case 'places-add': {
       const d = S.places.get(el.dataset.key); const n = await addShops(el.dataset.key, [id]);
       if (n) toast('Saved to Leads');
@@ -5585,6 +5686,7 @@ async function onSubmit(e) {
     const city = String(fv('oc.city')).replace(/\s+/g, ' ').trim(); const country = form.dataset.country || focusNow().country;
     if (!city) { toast('Type the name of a city.'); return; }
     const known = cityOptions(country).find((c) => placeText(c) === placeText(city)) || city.replace(/\b\p{Ll}/gu, (m) => m.toUpperCase());
+    if (S.loaded.places) findShowrooms(country, known);
     if (await setFocus({ country, city: known })) { delete S.form['oc.city']; if (S.layer && S.layer.kind === 'focus') { S.layer = null; S.form = {}; } if (location.hash !== '#showrooms') location.hash = '#showrooms'; else render(); startCityResearch(country, known); }
     return;
   }
@@ -5762,6 +5864,7 @@ async function init() {
   });
   initShell();
   window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); render(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resumeFind(); });
   setInterval(() => { if (!S.layer && S.route.view !== 'showrooms') schedule(); }, 60000);
   route(); render();
   const use = (name) => (window.claude && typeof window.claude.use === 'function' ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
@@ -5778,6 +5881,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { S, Data, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
+window.__facet = { S, Data, resumeFind, quickShops, locateCity, overpass, requestResearch, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
 init();
 })();
