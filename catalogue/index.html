@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Catalogue</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://uhfpoduakpsagoecszpt.supabase.co; connect-src https://uhfpoduakpsagoecszpt.supabase.co; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F7F4EE">
+<meta name="format-detection" content="telephone=no">
+<link rel="icon" href="../icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&display=swap">
+<link rel="stylesheet" href="catalogue.css?v=68d9ef52d5">
+</head>
+<body>
+<header class="bar">
+  <div class="wrap bar-in">
+    <span class="word" id="word">Catalogue</span>
+    <span class="kind" id="kind">Catalogue</span>
+  </div>
+</header>
+
+<main class="wrap" id="main" aria-live="polite">
+  <section class="hero" id="hero">
+    <p class="for" id="for" hidden></p>
+    <h1>Laboratory-grown diamond jewellery</h1>
+    <p class="lede" id="lede">Opening the catalogue…</p>
+  </section>
+  <nav class="cats" id="cats" aria-label="Kinds of piece" hidden></nav>
+  <section class="grid" id="grid" aria-label="Designs"></section>
+  <p class="note" id="note" hidden></p>
+  <section class="kit" id="kit" hidden></section>
+  <section class="contact" id="contact" hidden></section>
+</main>
+
+<footer class="foot"><div class="wrap" id="foot"></div></footer>
+
+<dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+  <div class="sheet-in">
+    <button type="button" class="close" id="sheet-close" aria-label="Close">×</button>
+    <div class="shots" id="sheet-shots"></div>
+    <div class="sheet-body">
+      <h2 id="sheet-title"></h2>
+      <p class="desc" id="sheet-desc"></p>
+      <dl class="facts" id="sheet-facts"></dl>
+      <div class="sheet-price" id="sheet-price"></div>
+      <div class="ask" id="sheet-ask"></div>
+    </div>
+  </div>
+</dialog>
+
+<script src="catalogue.js?v=68d9ef52d5"></script>
+</body>
+</html>

@@ -64,19 +64,19 @@ const DEFAULT_SEQUENCE = [
     body: "Hi! We're {{company}}, lab-grown diamond jewellery makers from India. We emailed you our catalogue, and here it is too: {{catalogue_link}}" },
   { id: 's1', day: 2, channel: 'email', by: 'app', title: 'Price list',
     subject: 'Wholesale prices for {{business}}',
-    body: "Hello {{contact}},\n\nFollowing my email with our catalogue, here is our wholesale price list for {{country}}, with minimum order and delivery times: {{price_list_link}}\n\nWe can also arrange samples so you can check the quality first.\n\nBest regards,\n{{sender}}" },
+    body: "Hello {{contact}},\n\nFollowing my email with our catalogue, here is our wholesale price list for {{country}}, with minimum order and delivery times: {{price_list_link}}\n\nWe can also send {{sample_offer}}, so you can check the quality first.\n\nBest regards,\n{{sender}}" },
   { id: 's5', day: 2, channel: 'linkedin', by: 'you', title: 'Connection note to the owner or buyer', subject: '',
     body: 'Hello {{contact}}, I make lab-grown diamond jewellery in India and work with jewellers in {{country}}. Happy to connect.' },
   { id: 's2', day: 4, channel: 'whatsapp', by: 'app', title: 'Catalogue on WhatsApp, or a call', subject: '',
     body: 'Hello {{contact}}, this is {{sender}} from {{company}}. Sharing our lab-grown diamond jewellery catalogue: {{catalogue_link}} Would you like prices for any pieces?',
     alt: 'Call {{business}} during shop hours. Introduce {{company}}, ask whether our catalogue and prices arrived, and offer samples.' },
   { id: 's7', day: 5, channel: 'instagram', by: 'you', title: 'DM the price list', subject: '',
-    body: 'Hello again! Our wholesale prices for {{country}} are here: {{price_list_link}} Happy to send a few samples so you can see the quality.' },
+    body: 'Hello again! Our wholesale prices for {{country}} are here: {{price_list_link}} Happy to send {{sample_offer}}, so you can see the quality.' },
   { id: 's8', day: 6, channel: 'whatsapp', by: 'app', optinOnly: true, title: 'Prices on WhatsApp (shops that opted in)', subject: '',
-    body: 'Hello {{contact}}, here are our wholesale prices for {{country}}: {{price_list_link}} We can send a few sample pieces first if that helps. {{sender}}, {{company}}' },
+    body: 'Hello {{contact}}, here are our wholesale prices for {{country}}: {{price_list_link}} If it helps, we can start with {{sample_offer}}. {{sender}}, {{company}}' },
   { id: 's4', day: 7, channel: 'email', by: 'app', title: 'Bestsellers and first-order offer',
     subject: 'Five bestsellers for {{business}}',
-    body: "Hello {{contact}},\n\nHere are five of our best-selling lab-grown diamond pieces, with prices for {{country}}: {{catalogue_link}}\n\nFor a first order we can send a sample set so you can see the quality before you commit.\n\nBest regards,\n{{sender}}" },
+    body: "Hello {{contact}},\n\nHere are five of our best-selling lab-grown diamond pieces, with prices for {{country}}: {{catalogue_link}}\n\nBefore a first order we can send {{sample_offer}}, so you can see the quality before you commit.\n\nBest regards,\n{{sender}}" },
   { id: 's9', day: 8, channel: 'linkedin', by: 'you', title: 'Message with the catalogue', subject: '',
     body: 'Thanks for connecting, {{contact}}. Here is our lab-grown diamond jewellery catalogue for jewellers in {{country}}: {{catalogue_link}} Samples are possible before a first order.' },
   { id: 's6', day: 10, channel: 'email', by: 'app', title: 'Last note',
@@ -97,7 +97,7 @@ const DEFAULT_FAIR_SEQUENCE = [
     body: 'Hello {{contact}}, good to meet you at {{fair}}. Happy to stay in touch.' },
   { id: 'f4', day: 9, channel: 'email', by: 'app', title: 'Samples or a first order',
     subject: 'Samples for {{business}}?',
-    body: "Hello {{contact}},\n\nWould a small sample set help you decide? We can send a few lab-grown diamond pieces from the catalogue so you can check the quality in your store.\n\nBest regards,\n{{sender}}" },
+    body: "Hello {{contact}},\n\nWould it help to see the quality first? We can send {{sample_offer}} to your store.\n\nBest regards,\n{{sender}}" },
   { id: 'f5', day: 16, channel: 'email', by: 'app', title: 'Last note',
     subject: 'Shall I keep you on my list?',
     body: "Hello {{contact}},\n\nI haven't heard back since {{fair}}, so I'll leave it here for now. If you'd like prices or samples later, just reply to this email.\n\nBest regards,\n{{sender}}" },
@@ -105,7 +105,7 @@ const DEFAULT_FAIR_SEQUENCE = [
 const DEFAULT_RETRY_SEQUENCE = [
   { id: 'r0', day: 0, channel: 'email', by: 'app', title: 'New designs',
     subject: 'New lab-grown diamond designs for {{business}}',
-    body: "Hello {{contact}},\n\nI wrote to you a few months ago. Since then we have added new lab-grown diamond designs in {{products}}: {{catalogue_link}}\n\nIf you are planning stock for the coming season, I'd be glad to send prices or a few samples.\n\nBest regards,\n{{sender}}\n{{company}}" },
+    body: "Hello {{contact}},\n\nI wrote to you a few months ago. Since then we have added new lab-grown diamond designs in {{products}}: {{catalogue_link}}\n\nIf you are planning stock for the coming season, I'd be glad to send prices or {{sample_offer}}.\n\nBest regards,\n{{sender}}\n{{company}}" },
   { id: 'r1', day: 4, channel: 'whatsapp', by: 'app', title: 'WhatsApp, or a call', subject: '',
     body: 'Hello {{contact}}, {{sender}} from {{company}} here. We have new lab-grown diamond designs this season: {{catalogue_link}} Shall I send prices?',
     alt: 'Call {{business}}, mention the new designs and ask who decides on new suppliers.' },
@@ -127,7 +127,7 @@ const DEFAULT_ANSWERS = [
   { id: 'a3', title: 'Delivery time', text: 'Delivery time depends on the order: the designs, quantities and finish. I\'ll confirm the production time with your quote, and we ship to {{country}} by insured courier.' },
   { id: 'a4', title: 'Payment terms', text: 'For a first order we ask for 50% in advance by bank transfer. The balance is due before dispatch, after we send you photos of the finished pieces and their certificates.' },
   { id: 'a5', title: 'Lab-grown and mined', text: 'Lab-grown diamonds have the same chemical, physical and optical properties as mined diamonds. They are grown in a lab instead of mined, so they cost less for the same size and quality.' },
-  { id: 'a6', title: 'Samples', text: 'The sample cost depends on the pieces you choose. Tell me which designs you\'d like and I\'ll send you the price for the sample set.' },
+  { id: 'a6', title: 'Samples', text: 'Yes. We can send {{sample_offer}}, so you can check the quality in your store before a first order.' },
   { id: 'a7', title: 'Custom designs and private label', text: 'Yes, we make custom designs from your sketch or photo, with CAD approval before production, and we can stamp your brand on the pieces. The minimum for custom work is [MOQ].' },
   { id: 'a8', title: 'Import duty and shipping', text: 'We ship [Incoterm] with full insurance. Import duty and VAT in {{country}} are paid by [you / us], and I can add an estimate to the quote.' },
   { id: 'a9', title: 'UK import duty', text: 'Our jewellery is made in India, so under the UK–India trade agreement (in force since 15 July 2026) it enters the UK at 0% import duty instead of 2%. We send [an origin declaration on the invoice / a certificate of origin] so you can claim it. Import VAT of 20% still applies.' },
@@ -228,7 +228,7 @@ const FX = [['GBP', '£'], ['USD', '$'], ['EUR', '€'], ['AED', 'AED ']];
 const CUR_SYM = { GBP: '£', USD: '$', EUR: '€', INR: '₹' };
 const EU = ['Germany', 'Italy', 'France', 'Netherlands', 'Belgium', 'Spain'];
 const DEFAULT_TRADE = { iec: '', gstin: '', lut: '', beneficiary: '', bankName: '', bankBranch: '', accountNo: '', ifsc: '', swift: '', adCode: '', piPrefix: 'AD/PI', port: 'Mumbai, India', paymentTerms: '50% advance by bank transfer to confirm the order. Balance before dispatch, after we send photos and certificates of the finished pieces.' };
-const DEFAULT_PRICING = { gold24: '', silver: '', wastage: 5, margin: 20, round: 5, rates: { GBP: '', USD: '', EUR: '', AED: '' }, ratesAt: '' };
+const DEFAULT_PRICING = { gold24: '', silver: '', wastage: 5, margin: 20, round: 5, rates: { GBP: '', USD: '', EUR: '', AED: '' }, ratesAt: '', retailMarkup: 2.5, retailVat: 20, retailRound: 5 };
 const GMAIL = 'Gmail';
 // Replies from Gmail: addresses on these free providers are matched one by one, never by domain
 const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk', 'ymail.com', 'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com', 'live.co.uk', 'msn.com', 'icloud.com', 'me.com', 'mac.com', 'aol.com', 'btinternet.com', 'sky.com', 'virginmedia.com', 'talktalk.net', 'protonmail.com', 'proton.me', 'mail.com', 'gmx.com', 'gmx.co.uk', 'zoho.com']);
@@ -452,6 +452,8 @@ function settings() {
     gmailSync: s.gmailSync && typeof s.gmailSync === 'object' ? s.gmailSync : {},
     inboxSync: s.inboxSync && typeof s.inboxSync === 'object' ? s.inboxSync : {},
     pricing: { ...DEFAULT_PRICING, ...(s.pricing || {}), rates: { ...DEFAULT_PRICING.rates, ...((s.pricing || {}).rates || {}) } },
+    catalogue: { on: false, token: '', page: '', publishedAt: '', count: 0, ...(s.catalogue && typeof s.catalogue === 'object' ? s.catalogue : {}) },
+    sampleKit: { on: false, designIds: [], price: '', credit: true, ...(s.sampleKit && typeof s.sampleKit === 'object' ? s.sampleKit : {}) },
     focus: focusFrom(s.focus),
   };
 }
@@ -511,7 +513,7 @@ function deepMerge(base, patch) {
 /* Every write lands in local state first, so the screen and follow-on logic see it at once;
    with the shared database, its snapshots then replace local state with the saved truth. */
 function applyLocal(op, coll, id, obj) {
-  if (coll === 'config') { const key = id === 'suppression' ? 'suppressDoc' : id === 'watch' ? 'watchDoc' : 'settingsDoc'; S[key] = op === 'set' ? clone(obj) : op === 'update' ? deepMerge(S[key], obj) : null; schedule(); return; }
+  if (coll === 'config') { const key = { suppression: 'suppressDoc', watch: 'watchDoc', catalogue: 'catalogueDoc' }[id] || 'settingsDoc'; S[key] = op === 'set' ? clone(obj) : op === 'update' ? deepMerge(S[key], obj) : null; schedule(); return; }
   const m = mapFor(coll); if (!m) return;
   if (op === 'set') m.set(id, { ...clone(obj), id });
   else if (op === 'update') { const cur = m.get(id); if (cur) m.set(id, deepMerge(cur, obj)); }
@@ -770,6 +772,7 @@ function fillMap(b) {
     price_list_link: trackedLink(b, 'p') || '[price list link]',
     whatsapp_link: co.whatsapp ? waUrl(co.whatsapp) : '[WhatsApp link]',
     gold_karats: goldKarats(country),
+    sample_offer: sampleOffer(country),
   };
 }
 function fill(text, b, extra) { const m = { ...fillMap(b), ...(extra || {}) }; return localTerms(text, m.country).replace(/\{\{(\w+)\}\}/g, (all, k) => (k in m ? m[k] : all)); }
@@ -1116,16 +1119,32 @@ function checkTracking() {
   fetch(trackBase() + '/health', { cache: 'no-store', credentials: 'omit' }).then((r) => (r.ok ? r.text() : ''), () => '').then((t) => { S.trackOk = t === 'ok'; if (S.trackOk) queueTracks(); schedule(); });
 }
 function trackedLink(b, kind) {
-  const st = settings(); const plain = kind === 'p' ? st.links.priceList : st.links.catalogue;
+  const st = settings(); const plain = catalogueReady() ? catalogueLink(kind) : kind === 'p' ? st.links.priceList : st.links.catalogue;
   if (!plain) return '';
   return trackingOn() && b && b.track ? `${trackBase()}/${kind}/${b.track}` : plain;
 }
 function opensOf(b) {
-  const o = (b && b.opens) || {}; const c = o.catalogue || {}, p = o.prices || {};
-  const nc = Number(c.n) || 0, np = Number(p.n) || 0; if (!nc && !np) return null;
-  return { n: nc + np, c: nc, p: np, last: [c.last, p.last].filter(Boolean).sort().pop() || '', what: nc && np ? 'catalogue and prices' : nc ? 'catalogue' : 'price list' };
+  const o = (b && b.opens) || {}; const c = o.catalogue || {}, p = o.prices || {}, k = o.kit || {}; const ds = o.designs && typeof o.designs === 'object' ? o.designs : {};
+  const nc = Number(c.n) || 0, np = Number(p.n) || 0, nk = Number(k.n) || 0, nd = Object.keys(ds).length; if (!nc && !np && !nk && !nd) return null;
+  const last = [c.last, p.last, k.last, ...Object.values(ds).map((x) => x && x.last)].filter(Boolean).sort().pop() || '';
+  return { n: nc + np, c: nc, p: np, kit: nk ? k : null, designs: nd, last, what: nc && np ? 'catalogue and prices' : np && !nc ? 'price list' : 'catalogue' };
 }
-function opensChip(b) { const o = opensOf(b); return o ? `<span class="chip accent" title="Opened through their own link">${ico('spark')}Opened ${esc(o.what)}${o.n > 1 ? ` ${o.n}×` : ''}${o.last ? ` · ${esc(fmtWhen(o.last))}` : ''}</span>` : ''; }
+function opensChip(b) {
+  const o = opensOf(b); if (!o) return '';
+  return `${o.n || o.designs ? `<span class="chip accent" title="Opened through their own link">${ico('spark')}Opened ${esc(o.what)}${o.n > 1 ? ` ${o.n}×` : ''}${o.last ? ` · ${esc(fmtWhen(o.last))}` : ''}</span>` : ''}${o.kit ? `<span class="chip gold">${ico('gem')}Asked about the sample kit</span>` : ''}`;
+}
+// The designs a shop opened on the online catalogue, most recent first.
+function viewedDesigns(b) {
+  const ds = ((b && b.opens) || {}).designs || {};
+  return Object.entries(ds).filter(([, v]) => v && v.last).sort((x, y) => String(y[1].last).localeCompare(String(x[1].last)))
+    .map(([id, v]) => ({ id, name: S.prices.has(id) ? designName(S.prices.get(id)) : 'a design no longer listed', n: Number(v.n) || 1, last: v.last }));
+}
+function catalogueViewsPanel(b) {
+  const o = opensOf(b); if (!o) return '';
+  const v = viewedDesigns(b); const opened = [o.c ? `catalogue ${o.c}×` : '', o.p ? `price list ${o.p}×` : ''].filter(Boolean).join(', ');
+  const rows = [['Opened', opened ? `${opened}${o.last ? `, last ${fmtWhen(o.last)}` : ''}` : ''], ['Looked at', v.map((x) => `${x.name}${x.n > 1 ? ` (${x.n}×)` : ''}`).join(', ')], ['Sample kit', o.kit ? `Asked ${fmtWhen(o.kit.last)}${Number(o.kit.n) > 1 ? ` (${o.kit.n}×)` : ''}` : '']].filter((r) => r[1]);
+  return `<section class="panel"><h3>Your catalogue</h3><dl class="kv">${rows.map(([k, val]) => `<dt>${k}</dt><dd>${esc(val)}</dd>`).join('')}</dl>${v.length || o.kit ? '<p class="hint" style="margin:0">Mention the designs they looked at when you call or write.</p>' : ''}</section>`;
+}
 // Opened in the last three days and not talking to you yet: the shops to call first.
 function hotShops() {
   const since = Date.now() - 3 * 86400000;
@@ -1135,7 +1154,7 @@ function hotShops() {
 function hotItem(b) {
   const c = contactOf(b); const tel = String(c.phone || c.whatsapp || '').replace(/[^\d+]/g, '');
   return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
-    <div class="meta"><span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span>${c.person ? `<span>${esc(c.person)}</span>` : ''}</div>
+    <div class="meta"><span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span>${c.person ? `<span>${esc(c.person)}</span>` : ''}${viewedDesigns(b).length ? `<span>Looked at ${esc(listAnd(viewedDesigns(b).slice(0, 3).map((x) => x.name)))}</span>` : ''}</div>
     <div class="tags">${opensChip(b)}${localChip(b)}</div></div>
     <div class="actions">${tel ? `<a class="btn small primary" href="tel:${esc(tel)}">${ico('phone')}Call</a>` : ''}<button class="btn small${tel ? '' : ' primary'}" data-act="call-new" data-id="${esc(b.id)}">${ico('phone')}Log a call</button></div></div>`;
 }
@@ -2037,7 +2056,7 @@ function syncLine() {
 }
 // Threads from Gmail (through the connector, or copied in by the background check) become replies in Leads.
 // `full(th, msgs)` may read a whole thread when the search preview might hide something new.
-async function ingestThreads(threads, w, full) {
+async function ingestThreads(threads, w, full, drafts) {
   let added = 0, auto = 0;
   const imported = (bid, mid) => ((S.businesses.get(bid) || {}).messages || []).some((x) => x.gmailId === String(mid));
   for (const th of threads) {
@@ -2055,6 +2074,9 @@ async function ingestThreads(threads, w, full) {
       if (AUTO_REPLY.test(String(m.subject || '')) || AUTO_REPLY.test(text.slice(0, 160))) { auto++; continue; }
       const ok = await logReply(b.id, { channel: 'email', text, at, tag: guessTag(text), gmail: { id: String(m.id), threadId: String(th.id), url: String(m.viewUrl || th.viewUrl || ''), subject: String(m.subject || '') } });
       if (!ok) continue; added++;
+      // a reply Claude drafted for this message while the app was closed
+      const dr = drafts && drafts.get(String(m.id));
+      if (dr) await write(() => updateBiz(b.id, { lead: { draft: { text: String(dr.text).slice(0, 4000), channel: 'email', forAt: at, at: String(dr.at || nowIso()), by: 'Claude' } } }));
       const later = sorted.find((x) => isOurs(x) && msgAt(x) > at);
       if (later) await gmailAnswered(b.id, later, String(th.id));
     }
@@ -2181,7 +2203,8 @@ async function processInbox() {
   S.inboxBusy = true;
   try {
     const threads = pending.filter((d) => d.kind !== 'bounce' && Array.isArray(d.messages)).map((d) => ({ id: String(d.threadId || d.id), messages: d.messages, viewUrl: String(d.viewUrl || '') }));
-    const { added } = await ingestThreads(threads, w, null);
+    const drafts = new Map(pending.filter((d) => d.draft && d.draft.forGmailId && String(d.draft.text || '').trim()).map((d) => [String(d.draft.forGmailId), d.draft]));
+    const { added } = await ingestThreads(threads, w, null, drafts);
     const bounced = await ingestBounces(pending.filter((d) => d.kind === 'bounce').map((d) => ({ id: d.gmailId || d.id, subject: d.subject, snippet: d.snippet, plaintextBody: d.plaintextBody, date: d.date })), w);
     const at = nowIso();
     for (const d of pending) await write(() => Data.update('inbox', d.id, { doneAt: at }));
@@ -2845,7 +2868,7 @@ function pcInputs() {
 }
 function pcRates() {
   const pr = settings().pricing; const g = (k, d) => (k in S.rt ? S.rt[k] : d);
-  return { gold24: g('gold24', pr.gold24), silver: g('silver', pr.silver), round: g('round', pr.round), rates: Object.fromEntries(FX.map(([c]) => [c, g(c, pr.rates[c])])) };
+  return { gold24: g('gold24', pr.gold24), silver: g('silver', pr.silver), round: g('round', pr.round), retailMarkup: g('retailMarkup', pr.retailMarkup), retailVat: g('retailVat', pr.retailVat), rates: Object.fromEntries(FX.map(([c]) => [c, g(c, pr.rates[c])])) };
 }
 function calcPrice(p, r) {
   const n = (v) => Math.max(0, Number(v) || 0);
@@ -2861,6 +2884,13 @@ function calcPrice(p, r) {
   const price = cost + margin + n(p.shipping);
   const fx = {}; for (const [c] of FX) { const rate = n(r.rates[c]); if (rate && price) fx[c] = roundUp(price / rate, n(r.round)); }
   return { fine, metal, wastage, making, setting, diamonds, extras, cost, margin, shipping: n(p.shipping), price, fx, missingMetal: n(p.weight) > 0 && !fine };
+}
+// What a UK shop would ask for a piece: your price in pounds × its usual mark-up, plus VAT, to the nearest £5.
+const retailOf = (pr = settings().pricing) => ({ markup: Number(pr.retailMarkup) > 0 ? Number(pr.retailMarkup) : 2.5, vat: pr.retailVat === '' || pr.retailVat == null ? 20 : Math.max(0, Number(pr.retailVat) || 0) });
+function shopPrice(gbp, pr = settings().pricing) {
+  const n = Number(gbp) || 0; if (!n) return 0;
+  const { markup, vat } = retailOf(pr); const step = Number(pr.retailRound) > 0 ? Number(pr.retailRound) : 5;
+  return Math.max(step, Math.round((n * markup * (1 + vat / 100)) / step) * step);
 }
 function pcDesc(p) {
   const ct = round2((Number(p.ct1) || 0) + (Number(p.ct2) || 0));
@@ -3574,7 +3604,7 @@ function leadItem(b) {
     <div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div>
     <div class="meta">${chLabel(l.lastChannel)}<span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span>${l.followUpAt ? `<span>Follow up ${esc(fmtDay(l.followUpAt))}</span>` : ''}${waiting && needsReply(b) ? `<span>${esc(reminderText(l))}</span>` : ''}</div>
     ${last ? `<div class="msg ${last.dir === 'in' ? 'quote' : ''}">${last.dir === 'out' ? 'You: ' : ''}${esc(trunc(last.text, 220))}</div>` : ''}
-    <div class="tags">${stageChip(l.stage)}${!waiting && lastOut(b) ? `<span class="chip good">${ico('check')}Answered${lastOut(b).by ? ` by ${esc(lastOut(b).by)}` : ''} · ${esc(fmtWhen(lastOut(b).at))}</span>` : ''}${waiting ? `<span class="chip ${needsReply(b) ? (h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad') : ''}">${ico('clock')}${needsReply(b) ? `waiting ${fmtWait(h)}` : `snoozed until ${esc(fmtWhen(l.remindAt))}`}</span>` : ''}${waiting ? windowChip(l.lastInAt, l.lastChannel) : ''}${l.ordersValue ? `<span class="chip gold">${money(l.ordersValue)} ordered</span>` : ''}${exChip(b)}</div>
+    <div class="tags">${stageChip(l.stage)}${waiting && claudeDraft(b) ? `<span class="chip accent">${ico('spark')}Draft ready</span>` : ''}${!waiting && lastOut(b) ? `<span class="chip good">${ico('check')}Answered${lastOut(b).by ? ` by ${esc(lastOut(b).by)}` : ''} · ${esc(fmtWhen(lastOut(b).at))}</span>` : ''}${waiting ? `<span class="chip ${needsReply(b) ? (h < 2 ? 'accent' : h < 12 ? 'warn' : 'bad') : ''}">${ico('clock')}${needsReply(b) ? `waiting ${fmtWait(h)}` : `snoozed until ${esc(fmtWhen(l.remindAt))}`}</span>` : ''}${waiting ? windowChip(l.lastInAt, l.lastChannel) : ''}${l.ordersValue ? `<span class="chip gold">${money(l.ordersValue)} ordered</span>` : ''}${exChip(b)}</div>
   </div>${waiting ? `<div class="actions">
     <button class="btn small primary" data-act="open-biz" data-id="${esc(b.id)}">Reply</button>
     ${moreMenu('l:' + b.id, `<button class="btn small" data-act="answered" data-id="${esc(b.id)}">${ico('check')}Mark answered</button>`)}
@@ -4147,14 +4177,15 @@ function pricesView() {
   const pf = (k, label, step = 'any', ph = '') => `<div class="field"><label for="pc-${k}">${label}</label><input class="input" id="pc-${k}" type="number" min="0" step="${step}" inputmode="decimal" data-pc="${k}" value="${esc(p[k] ?? '')}" placeholder="${esc(ph)}"></div>`;
   const rf = (k, label) => `<div class="field"><label for="rt-${k}">${label}</label><input class="input" id="rt-${k}" type="number" min="0" step="any" inputmode="decimal" data-rt="${k}" value="${esc((k in r.rates ? r.rates[k] : r[k]) ?? '')}" placeholder="Today's rate"></div>`;
   const parts = [[`Metal: ${Number(p.weight) || 0} g of ${METAL_SHORT[p.metal] || ''} at ${inr(c.fine * (PURITY[p.metal] || 1))} a gram`, c.metal], [`Wastage, ${Number(p.wastage) || 0}%`, c.wastage], [`Making, ${inr(p.makingPerG)} a gram`, c.making], ['Setting and finishing', c.setting], ['Laboratory-grown diamonds', c.diamonds], ['Plating, certificate and other', c.extras]].filter(([, v]) => v > 0);
-  const fx = Object.entries(c.fx); const shop = c.fx.GBP ? Math.round(c.fx.GBP * 2.5 * 1.2) : 0;
+  const fx = Object.entries(c.fx); const rpr = { ...pr, retailMarkup: r.retailMarkup, retailVat: r.retailVat }; const rv = retailOf(rpr); const shop = shopPrice(c.fx.GBP, rpr);
+  const sf = (k, label) => `<div class="field"><label for="rt-${k}">${label}</label><input class="input" id="rt-${k}" type="number" min="0" step="any" inputmode="decimal" data-rt="${k}" value="${esc(r[k] ?? '')}"></div>`;
   const buyers = focusBiz().filter((x) => !['rejected', 'unsubscribed', 'bounced'].includes(x.status)).sort((x, y) => (y.lead ? 1 : 0) - (x.lead ? 1 : 0) || x.name.localeCompare(y.name));
   const saved = [...S.prices.values()].sort((x, y) => String((x.inputs || {}).code || '').localeCompare(String((y.inputs || {}).code || '')));
   const curOpts = fx.length ? fx.map(([k]) => [k, k]) : FX.map(([k]) => [k, k]);
   return `<header class="head"><div><h1>Prices</h1><p>Work out a wholesale price from metal, diamonds and making, then see it in pounds, dollars, euros and dirhams.</p></div></header>
   <section class="section"><div class="sec-head"><h2>Today's rates</h2><span class="hint">${pr.ratesAt ? `Saved ${esc(fmtDate(pr.ratesAt))}` : 'Not saved yet'}</span></div>
     <div class="panel"><div class="grid3 nums">${rf('gold24', 'Gold 24K, ₹ a gram')}${rf('silver', 'Silver 999, ₹ a gram')}${rf('GBP', '₹ for £1')}${rf('USD', '₹ for $1')}${rf('EUR', '₹ for €1')}${rf('AED', '₹ for 1 dirham')}</div>
-      <div class="grid3"><div class="field"><label for="rt-round">Round prices up to</label>${selectHtml('rt-round', 'data-rt="round"', [['1', 'The nearest 1'], ['5', 'The nearest 5'], ['10', 'The nearest 10'], ['0', "Don't round"]], String(r.round ?? 5))}</div></div>
+      <div class="grid3"><div class="field"><label for="rt-round">Round prices up to</label>${selectHtml('rt-round', 'data-rt="round"', [['1', 'The nearest 1'], ['5', 'The nearest 5'], ['10', 'The nearest 10'], ['0', "Don't round"]], String(r.round ?? 5))}</div>${sf('retailMarkup', 'UK shop mark-up, ×')}${sf('retailVat', 'UK VAT, %')}</div>
       <div class="actions"><button class="btn primary" data-act="pc-save-rates">${ico('check')}Save rates</button><span class="hint">Saved rates also fill the US$ rate on quotes and invoices.</span></div></div></section>
   <div class="calc">
     <section class="panel"><h3>The piece</h3>
@@ -4169,7 +4200,7 @@ function pricesView() {
     <section class="panel"><h3>Price</h3>
       ${c.price ? `<dl class="ledger">${parts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(inr(v))}</dd>`).join('')}<dt class="tot">Cost</dt><dd class="tot">${esc(inr(c.cost))}</dd>${c.margin ? `<dt>Margin, ${Number(p.margin) || 0}%</dt><dd>${esc(inr(c.margin))}</dd>` : ''}${c.shipping ? `<dt>Shipping and insurance</dt><dd>${esc(inr(c.shipping))}</dd>` : ''}<dt class="tot">Wholesale price</dt><dd class="tot">${esc(inr(c.price))}</dd></dl>
         ${fx.length ? `<div class="tiles wide">${fx.map(([k, v]) => tile(esc(fxFmt(k, v)), k)).join('')}</div>` : '<p class="hint">Add exchange rates above to see this price in pounds, dollars, euros and dirhams.</p>'}
-        ${shop ? `<p class="hint">In a UK shop at a 2.5× mark-up plus 20% VAT, this sells for about £${shop.toLocaleString('en-GB')}.</p>` : ''}
+        ${shop ? `<p class="hint">In a UK shop at a ${rv.markup}× mark-up plus ${rv.vat}% VAT, this sells for about £${shop.toLocaleString('en-GB')}. Designs, the PDF and the online price list show this as the suggested shop price.</p>` : ''}
         <div class="actions"><button class="btn small" data-act="pc-copy">${ico('copy')}Copy</button><button class="btn small" data-act="pc-save">${ico('check')}Save to price list</button><button class="btn small quiet" data-act="pc-reset">Clear</button></div>
         <div class="grid2"><div class="field"><label for="pc-buyer">Quote it to</label>${selectHtml('pc-buyer', 'data-pc="buyer"', buyers.map((x) => [x.id, `${x.name}${x.city ? ', ' + x.city : ''}`]), p.buyer || '', 'Choose a buyer')}</div><div class="field"><label for="pc-cur">In</label>${selectHtml('pc-cur', 'data-pc="cur"', curOpts, p.cur || curOpts[0][0])}</div></div>
         <div><button class="btn small primary" data-act="pc-quote">${ico('doc')}Start a quote</button></div>`
@@ -4234,7 +4265,8 @@ function designCard(d, cur, r) {
     <input type="checkbox" class="pick dpick" data-dsel="${esc(d.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(designName(d))}">
     <div class="dphoto">${src ? `<img src="${esc(src)}" alt="${esc(designName(d))}">` : ph ? '<span class="sub">Loading photo…</span>' : `<button type="button" class="btn small" data-act="design-photos" data-id="${esc(d.id)}">${ico('camera')}Add photos</button>`}</div>
     <div class="stack"><b>${esc(designName(d))}</b><span class="sub">${esc(localTerms(pcDesc({ ...p, code: '' }), focusNow().country))}</span>
-      <div class="meta">${price ? `<span class="dprice">${esc(fxFmt(cur, price))}</span>` : '<span>Add today\'s rates in Prices</span>'}${d.category ? `<span>${esc(DESIGN_CAT_LABEL[d.category] || '')}</span>` : ''}${(d.photos || []).length > 1 ? `<span>${d.photos.length} photos</span>` : ''}</div></div>
+      <div class="meta">${price ? `<span class="dprice">${esc(fxFmt(cur, price))}</span>` : '<span>Add today\'s rates in Prices</span>'}${cur === 'GBP' && shopPrice(price) ? `<span>Shop price about £${shopPrice(price).toLocaleString('en-GB')}</span>` : ''}${d.category ? `<span>${esc(DESIGN_CAT_LABEL[d.category] || '')}</span>` : ''}${(d.photos || []).length > 1 ? `<span>${d.photos.length} photos</span>` : ''}</div>
+      ${kitHas(d.id) || d.hidden ? `<div class="tags">${kitHas(d.id) ? `<span class="chip gold">${ico('gem')}In the sample kit</span>` : ''}${d.hidden ? '<span class="chip">Not in the online catalogue</span>' : ''}</div>` : ''}</div>
     <div class="actions">${moreMenu('d:' + d.id, `<button class="btn small" data-act="design-photos" data-id="${esc(d.id)}">${ico('camera')}Photos</button><button class="btn small" data-act="design-edit" data-id="${esc(d.id)}">Edit</button><button class="btn small" data-act="pc-load" data-id="${esc(d.id)}">${ico('calc')}Change the price</button>`)}</div>
   </article>`;
 }
@@ -4244,9 +4276,76 @@ function designsView() {
   wantPhotos(list.map((d) => ((d.photos || [])[0] || {}).thumb));
   const n = S.designSel.size; const cats = DESIGN_CATS.filter(([k]) => all.some((d) => (d.category || 'other') === k));
   return `<header class="head"><div><h1>Designs</h1><p>Your pieces with photos and today's prices. Tick a few to send a shop, make a PDF catalogue or start a quote.</p></div><div class="actions"><a class="btn primary" href="#prices">${ico('plus')}Add a design</a></div></header>
+  ${all.length ? catalogueSection(all) : ''}
   ${all.length ? `<div class="filters">${selectHtml('d-cur', 'data-dcur="1" aria-label="Prices in"', FX.map(([c]) => [c, `Prices in ${c}`]), cur)}</div>${cats.length > 1 ? seg('dcat', cat, [['all', `All ${all.length}`], ...cats.map(([k, l]) => [k, `${l} ${all.filter((d) => (d.category || 'other') === k).length}`])]) : ''}` : ''}
   ${list.length ? `<div class="designs">${list.map((d) => designCard(d, cur, r)).join('')}</div>` : emptyBox(all.length ? 'No designs in this group.' : 'No designs yet. Work out a piece in Prices and tap Save to price list. It shows here, ready for photos.', `<a class="btn primary" href="#prices">${ico('calc')}Prices</a>`)}
-  ${n ? `<div class="selbar many" role="region" aria-label="Selected designs"><span><b>${n}</b> ${n === 1 ? 'design' : 'designs'}</span><button type="button" class="btn quiet" data-act="dsel-clear">Clear</button><button type="button" class="btn" data-act="designs-pdf">${ico('doc')}PDF</button><button type="button" class="btn" data-act="designs-share">${ico('share')}Send</button><button type="button" class="btn primary" data-act="designs-quote">${ico('doc')}Quote</button></div><div class="selbar-space" aria-hidden="true"></div>` : ''}`;
+  ${n ? `<div class="selbar many" role="region" aria-label="Selected designs"><span><b>${n}</b> ${n === 1 ? 'design' : 'designs'}</span><button type="button" class="btn quiet" data-act="dsel-clear">Clear</button><button type="button" class="btn" data-act="designs-pdf">${ico('doc')}PDF</button><button type="button" class="btn" data-act="kit-add">${ico('gem')}Add to kit</button><button type="button" class="btn" data-act="designs-share">${ico('share')}Send</button><button type="button" class="btn primary" data-act="designs-quote">${ico('doc')}Quote</button></div><div class="selbar-space" aria-hidden="true"></div>` : ''}`;
+}
+/* ---------- the online catalogue: your designs on a page of their own, and the sample kit ---------- */
+// The page lives next to the app (catalogue/); each shop's link reaches it through the link service, which notes
+// the open and which designs the shop looked at. A link without a shop carries the catalogue's own token instead.
+const siteBase = () => (S.device && S.device.siteBase) || '';
+const catalogueReady = () => { const c = settings().catalogue; return !!(c.on && c.page && c.token && c.publishedAt); };
+function catalogueLink(kind) { const c = settings().catalogue; return c.page && c.token ? `${c.page}#t=${c.token}${kind === 'p' ? '&p=1' : ''}` : ''; }
+const kitHas = (id) => (settings().sampleKit.designIds || []).includes(id);
+function sampleKit() {
+  const k = settings().sampleKit; const ids = (k.designIds || []).filter((id) => S.prices.has(id));
+  return k.on && ids.length ? { ids, price: Math.max(0, Number(k.price) || 0), credit: k.credit !== false } : null;
+}
+// The kit is priced in pounds; other currencies go through the rupee rates saved on the Prices page.
+function kitPriceIn(cur, k = sampleKit()) {
+  if (!k || !k.price) return 0; if (cur === 'GBP') return k.price;
+  const r = settings().pricing.rates; const gbp = Number(r.GBP) || 0, x = Number(r[cur]) || 0;
+  return gbp && x ? roundUp((k.price * gbp) / x, Number(settings().pricing.round) || 0) : 0;
+}
+// What messages offer: the kit when there is one, otherwise a few samples.
+function sampleOffer(country) {
+  const k = sampleKit(); if (!k) return 'a few samples';
+  const want = currencyFor(country || UK); const cur = kitPriceIn(want, k) ? want : 'GBP'; const p = kitPriceIn(cur, k);
+  return `our sample kit of ${k.ids.length} ${k.ids.length === 1 ? 'piece' : 'pieces'}${p ? ` for ${fxFmt(cur, p)}` : ''}${p && k.credit ? ', taken off your first order' : ''}`;
+}
+function catalogueDoc(list) {
+  const st = settings(); const co = st.company; const pr = st.pricing; const r = { gold24: pr.gold24, silver: pr.silver, round: pr.round, rates: pr.rates };
+  const designs = list.map((d) => {
+    const p = d.inputs || {}; const c = calcPrice({ ...p }, r);
+    return { id: d.id, code: designName(d), category: d.category || 'other', desc: localTerms(pcDesc({ ...p, code: '' }), UK), metal: METAL_SHORT[p.metal] || '', weight: Number(p.weight) || 0, ct: round2((Number(p.ct1) || 0) + (Number(p.ct2) || 0)), note: String(d.note || '').slice(0, 500), photos: (d.photos || []).map((x) => ({ id: x.id, thumb: x.thumb, w: x.w, h: x.h })), price: c.fx, shopGBP: shopPrice(c.fx.GBP) };
+  });
+  const k = sampleKit(); const ids = k ? k.ids.filter((id) => list.some((d) => d.id === id)) : [];
+  return {
+    publishedAt: nowIso(), ratesAt: pr.ratesAt || '', retail: retailOf(pr), designs,
+    company: { name: co.name || 'Ark Diamond', email: co.senderEmail || '', whatsapp: co.whatsapp || '', website: co.website || '', address: co.address || '' },
+    kit: k && ids.length ? { ids, credit: k.credit, prices: Object.fromEntries(FX.map(([cur]) => [cur, kitPriceIn(cur, k)]).filter(([, v]) => v)) } : null,
+  };
+}
+async function publishCatalogue(quiet) {
+  if (!siteBase()) { if (!quiet) toast('The online catalogue works in the Ark Diamond app on your phone.'); return false; }
+  const list = designList().filter((d) => !d.hidden); if (!list.length) { if (!quiet) toast('Add a design first, in Prices.'); return false; }
+  const c = settings().catalogue; const doc = catalogueDoc(list);
+  if (!(await write(() => Data.set('config', 'catalogue', doc)))) return false;
+  const next = { ...c, on: c.publishedAt ? !!c.on : true, token: c.token || newTrack(), page: siteBase() + 'catalogue/', publishedAt: doc.publishedAt, count: list.length };
+  const ok = await write(() => saveSettings({ catalogue: next }));
+  if (ok && !quiet) toast(`Online catalogue ${c.publishedAt ? 'updated' : 'is live'}: ${list.length} ${list.length === 1 ? 'design' : 'designs'}`);
+  return ok;
+}
+function catalogueSection(all) {
+  const c = settings().catalogue; const pr = settings().pricing; const shown = all.filter((d) => !d.hidden).length; const live = catalogueReady();
+  const stale = !!c.publishedAt && (all.some((d) => String(d.updatedAt || '') > c.publishedAt) || String(pr.ratesAt || '') > String(c.publishedAt).slice(0, 10) || shown !== Number(c.count));
+  const status = c.publishedAt ? `${c.count} ${Number(c.count) === 1 ? 'design' : 'designs'} online since ${fmtWhen(c.publishedAt)}${stale ? '. Designs or rates changed since then: update it so shops see today\'s.' : '.'}` : 'Put your designs on a page of their own. Each shop gets its own link, so you see which designs it looked at. The price-list link shows the same page with your prices and a suggested UK shop price.';
+  return `<section class="panel"><div class="sec-head"><h3 style="margin:0">Online catalogue</h3><span class="chip ${live ? 'good' : ''}">${live ? `${ico('check')}In your messages` : c.publishedAt ? 'Not in messages' : 'Not online yet'}</span></div>
+    <p class="hint" style="margin:0">${esc(status)}</p>
+    <div class="actions">${siteBase() ? `<button class="btn ${!c.publishedAt || stale ? 'primary' : ''}" data-act="catalogue-publish" ${shown ? '' : 'disabled'}>${ico('refresh')}${c.publishedAt ? 'Update the online catalogue' : 'Put it online'}</button>` : '<span class="hint">The online catalogue works in the Ark Diamond app on your phone.</span>'}${c.publishedAt ? `<button class="btn" data-act="catalogue-use">${live ? 'Stop using it in messages' : 'Use it in messages'}</button><a class="btn quiet" href="${esc(catalogueLink('p'))}" target="_blank" rel="noopener">${ico('ext')}See the price list</a>` : ''}</div>
+    ${live ? '<p class="hint" style="margin:0">Messages carry each shop\'s own link to this catalogue and price list, instead of the links in Connections.</p>' : ''}
+  </section>${kitSection()}`;
+}
+function kitSection() {
+  const k = settings().sampleKit; const pieces = (k.designIds || []).map((id) => S.prices.get(id)).filter(Boolean);
+  return `<section class="panel"><div class="sec-head"><h3 style="margin:0">Sample kit</h3>${sampleKit() ? `<span class="chip good">${ico('check')}Offered</span>` : ''}</div>
+    <p class="hint" style="margin:0">A set price for a few pieces, so a shop sees the quality first. Messages offer it where they would offer a few samples, and the online catalogue shows it with buttons to ask for it.</p>
+    ${pieces.length ? `<div class="tags">${pieces.map((d) => `<span class="chip">${esc(designName(d))} <button type="button" class="linkish" data-act="kit-remove" data-id="${esc(d.id)}" aria-label="Take ${esc(designName(d))} out of the kit">×</button></span>`).join('')}</div>` : '<p class="hint" style="margin:0">Tick designs below, then tap Add to kit.</p>'}
+    <div class="grid3"><div class="field"><label for="kit-price">Price of the kit, £</label><input class="input" id="kit-price" type="number" min="0" step="1" inputmode="decimal" data-k="kit.price" value="${esc(fv('kit.price', k.price ?? ''))}"></div></div>
+    <label class="switch"><input type="checkbox" id="kit-credit" data-k="kit.credit" ${fv('kit.credit', k.credit !== false) ? 'checked' : ''}>Taken off their first order</label>
+    <label class="switch"><input type="checkbox" id="kit-on" data-k="kit.on" ${fv('kit.on', !!k.on) ? 'checked' : ''}>Offer the kit in messages and the online catalogue</label>
+    <div class="actions"><button class="btn primary" data-act="kit-save">${ico('check')}Save the kit</button></div></section>`;
 }
 function designPhotosModal() {
   const d = S.prices.get(S.layer.id); if (!d) return '';
@@ -4264,6 +4363,7 @@ function designEditModal() {
     <div class="field"><label for="de-code">Design code or name</label><input class="input" id="de-code" data-k="de.code" value="${esc(fv('de.code', (d.inputs || {}).code || ''))}"></div>
     <div class="field"><label for="de-cat">Kind of piece</label>${selectHtml('de-cat', 'data-k="de.cat"', DESIGN_CATS, fv('de.cat', d.category || ''), 'Choose')}</div>
     <div class="field"><label for="de-note">Note</label><textarea class="input" id="de-note" data-k="de.note" style="min-height:60px" placeholder="Sizes, stones, how long it takes to make">${esc(fv('de.note', d.note || ''))}</textarea></div>
+    <label class="switch"><input type="checkbox" id="de-show" data-k="de.show" ${fv('de.show', !d.hidden) ? 'checked' : ''}>Show in the online catalogue</label>
     <p class="hint" style="margin:0">To change the metal, weight or stones, use Change the price on the design.</p>
     <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="submit" class="btn primary">${ico('check')}Save</button></div>
   </form>`;
@@ -4285,7 +4385,8 @@ function designsPdf(list, cur) {
   const colW = (CW - 18) / 2, boxH = 200, cardH = boxH + 60; let y = 0, col = 0;
   const top = () => { pdf.addPage(); y = 56; pdf.text(M, y, company.toUpperCase(), { f: 'TB', size: 15, sp: 2, color: NAVY }); pdf.text(R, y, 'CATALOGUE', { f: 'B', size: 8, sp: 1.3, color: GOLD, align: 'right' }); y += 11; pdf.line(M, y, R, y, { color: GOLD, w: 0.9 }); y += 24; };
   top();
-  for (const ln of pdfWrap(localTerms(`Lab-grown diamond jewellery. Wholesale prices in ${cur} at today's rates, ${fmtDate(todayStr())}.`, country), 'R', 9, CW)) { pdf.text(M, y, ln, { size: 9, color: MUTED }); y += 12; }
+  const rv = retailOf();
+  for (const ln of pdfWrap(localTerms(`Lab-grown diamond jewellery. Wholesale prices in ${cur} at today's rates, ${fmtDate(todayStr())}.${cur === 'GBP' ? ` Suggested UK shop prices use a ${rv.markup}× mark-up plus ${rv.vat}% VAT.` : ''}`, country), 'R', 9, CW)) { pdf.text(M, y, ln, { size: 9, color: MUTED }); y += 12; }
   y += 12;
   for (const d of list) {
     if (col === 0 && y + cardH > pdf.H - 60) top();
@@ -4297,6 +4398,7 @@ function designsPdf(list, cur) {
     pdf.text(x, ty, pdfFit(designName(d), 'B', 10.5, colW - 70), { f: 'B', size: 10.5, color: INK });
     if (price) pdf.text(x + colW, ty, fxFmt(cur, price), { f: 'B', size: 10.5, color: NAVY, align: 'right' });
     ty += 13; for (const ln of pdfWrap(localTerms(pcDesc({ ...(d.inputs || {}), code: '' }), country), 'R', 8.5, colW).slice(0, 2)) { pdf.text(x, ty, ln, { size: 8.5, color: MUTED }); ty += 11; }
+    if (cur === 'GBP' && shopPrice(price)) pdf.text(x, ty, `Suggested UK shop price £${shopPrice(price).toLocaleString('en-GB')} incl. VAT`, { size: 8, color: GOLD });
     col = 1 - col; if (col === 0) y += cardH;
   }
   const n = pdf.pageCount; const foot = [company, co.whatsapp ? `WhatsApp ${co.whatsapp}` : '', co.senderEmail, co.website].filter(Boolean).join('  ·  ');
@@ -4317,7 +4419,7 @@ function connectionsView() {
   const days = { email: dayList('email'), whatsapp: dayList('whatsapp') };
   return `<header class="head"><div><h1>Connections</h1><p>${gmailOn() ? 'Gmail is connected. The other channels connect at the end, and until then their steps are tasks you mark done.' : phoneMail() ? 'Email opens in your mail app. The other channels connect at the end, and until then their steps are tasks you mark done.' : 'Each channel connects at the end. Until then the app runs every step as a task you mark done.'}</p></div></header>
   <div class="cards">${CONNECTIONS.map((c) => c.key === 'email' && phoneMail() ? phoneMailCard() : c.key === 'email' && S.gm.state !== 'off' ? gmailCard() : `<div class="ccard"><h3>${ico(c.icon)}${esc(c.name)}</h3><span>${c.on ? `<span class="chip good">${ico('check')}Working</span>` : '<span class="chip">Not connected yet</span>'}</span><p>${esc(typeof c.does === 'function' ? c.does(days) : c.does)}</p><ul>${c.needs.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`).join('')}</div>
-  <section class="section"><h2>Your company</h2><p class="hint">These fill the placeholders in every message. Add the catalogue and price-list links when they're ready.</p>
+  <section class="section"><h2>Your company</h2><p class="hint">These fill the placeholders in every message. ${catalogueReady() ? 'Messages use your online catalogue (in Designs) for the catalogue and price-list links.' : "Add the catalogue and price-list links when they're ready, or put your designs online from Designs."}</p>
     <div class="panel"><div class="grid2">
       <div class="field"><label for="co-name">Company name</label><input class="input" id="co-name" data-k="co.name" value="${esc(f('co.name', co.name))}"></div>
       <div class="field"><label for="co-sender">Your name (signs the messages)</label><input class="input" id="co-sender" data-k="co.senderName" value="${esc(f('co.senderName', co.senderName))}"></div>
@@ -4439,6 +4541,7 @@ function bizDrawer(b) {
     ${l ? leadPanel(b) : ''}
     ${['found', 'rejected'].includes(b.status) ? '' : quotesPanel(b) + ordersPanel(b) + samplesPanel(b)}
     ${similarPanel(b)}
+    ${catalogueViewsPanel(b)}
     ${stockPanel(b)}
     <section class="panel"><h3>Contact</h3>${rows.length ? `<dl class="kv">${rows.map(([k, v, raw]) => `<dt>${k}</dt><dd>${raw ? v : esc(v)}</dd>`).join('')}</dl>` : '<p class="hint">No contact details yet.</p>'}
       ${needsConsent(b) ? `<p class="hint">${esc(UK_EMAIL_RULE)}</p>` : ''}
@@ -4466,19 +4569,30 @@ function bizActions(b) {
   if (b.status === 'rejected') return `<button class="btn" data-act="approve" data-id="${esc(b.id)}">Approve after all</button>`;
   return '';
 }
+// A reply Claude drafted in the background, if it answers the shop's latest message.
+function claudeDraft(b) {
+  const l = b && b.lead; const d = l && l.draft;
+  if (!d || !String(d.text || '').trim() || !l.awaitingReply) return null;
+  if (l.lastInAt && d.forAt && Date.parse(d.forAt) < Date.parse(l.lastInAt)) return null;
+  return d;
+}
 function replyBox(b) {
   const l = b.lead; const h = hoursSince(l.lastInAt); const last = inbound(b).slice(-1)[0]; const id = b.id;
+  const cd = claudeDraft(b); if (cd && S.form['draft.' + id] === undefined) S.form['draft.' + id] = String(cd.text);
+  const waNum = contactOf(b).whatsapp || contactOf(b).phone; const waReply = l.lastChannel === 'whatsapp' && !!waUrl(waNum);
   const busy = S.ai.busy === 'draft:' + id; const gmReply = gmailOn() && !!contactOf(b).email && l.lastChannel === 'email';
   const pmReply = !gmReply && phoneMail() && !!contactOf(b).email && l.lastChannel === 'email'; const opened = S.mailOpened.has('reply:' + id);
   return `<section class="panel alert"><h3>Waiting for your reply · ${fmtWait(h)}</h3>
     <div class="meta">${chLabel(l.lastChannel)}${windowChip(l.lastInAt, l.lastChannel)}<span>${esc(reminderText(l))}</span></div>
     ${last ? `<div class="msg quote">${esc(last.text)}</div>` : ''}
     <div class="field"><label for="draft-${esc(id)}">Your reply</label><textarea class="input" id="draft-${esc(id)}" data-k="draft.${esc(id)}" placeholder="${busy ? 'Claude is writing…' : aiAvailable() ? 'Write your reply, or ask Claude for a draft' : 'Write your reply'}">${esc(fv('draft.' + id))}</textarea></div>
+    ${cd ? `<p class="hint" style="margin:0">${ico('spark')}Claude drafted this ${esc(fmtWhen(cd.at))} from your ready answers and their messages. Check prices, dates and anything in [brackets] before you send.</p>` : ''}
     ${settings().answers.length ? `<div class="field"><label for="ans-${esc(id)}">Insert a ready answer</label><select class="input" id="ans-${esc(id)}" data-answer="${esc(id)}"><option value="">Choose an answer</option>${settings().answers.map((a) => `<option value="${esc(a.id)}">${esc(a.title)}</option>`).join('')}</select></div>` : ''}
     <div class="actions">
       ${aiAvailable() ? (busy ? `<button class="btn" data-act="ai-stop">${ico('stop')}Stop</button>` : `<button class="btn" data-act="ai-draft" data-id="${esc(id)}">${ico('spark')}Draft with Claude</button>`) : ''}
       ${gmReply ? `<button class="btn primary" data-act="gm-reply" data-id="${esc(id)}" ${S.gm.busy === 'reply:' + id ? 'disabled' : ''}>${ico('mail')}${S.gm.busy === 'reply:' + id ? 'Sending…' : 'Send with Gmail'}</button>` : ''}
       ${pmReply ? mailOpen(contactOf(b).email, replySubject(b), String(fv('draft.' + id)), 'reply:' + id, !opened, 'reply:' + id).replace('btn small', 'btn') : ''}
+      ${waReply ? `<a class="btn" href="${esc(waUrl(waNum, String(fv('draft.' + id))))}" target="_blank" rel="noopener" data-act="wa-reply" data-id="${esc(id)}">${ico('chat')}Open in WhatsApp</a>` : ''}
       <button class="btn ${gmReply || (pmReply && !opened) ? '' : 'primary'}" data-act="answered" data-id="${esc(id)}">${ico('check')}I've replied</button>
       ${moreMenu('reply:' + id, `<button class="btn small" data-act="copy-draft" data-id="${esc(id)}">${ico('copy')}Copy</button><button class="btn small" data-act="snooze" data-id="${esc(id)}" data-when="1h">${ico('clock')}Remind me in 1 h</button><button class="btn small" data-act="snooze" data-id="${esc(id)}" data-when="tomorrow">${ico('clock')}Tomorrow 9:00</button>`)}
     </div>
@@ -4986,6 +5100,7 @@ async function onClick(e) {
   if (act === 'layer-bg') { if (e.target === el) closeLayer(); return; }
   if (act === 'mail-open' && el.dataset.copy) copyStepFor(el.dataset.copy);
   if (act === 'mail-open') { const fresh = el.dataset.mail ? mailFor(el.dataset.mail) : ''; if (fresh) el.href = fresh; if (el.dataset.key) { S.mailOpened.add(el.dataset.key); setTimeout(schedule, 700); } return; }
+  if (act === 'wa-reply') { const b = S.businesses.get(id); const c = b ? contactOf(b) : {}; const fresh = b ? waUrl(c.whatsapp || c.phone, String(fv('draft.' + id))) : ''; if (fresh) el.href = fresh; return; }
   if (el.tagName === 'A' && act !== 'go') return;
   if (S.confirmKey && !CONFIRM_ACTS.includes(act)) S.confirmKey = '';
   switch (act) {
@@ -5082,6 +5197,24 @@ async function onClick(e) {
     case 'design-photos': openLayer({ kind: 'dphotos', id }); break;
     case 'design-edit': S.form = {}; openLayer({ kind: 'design', id }); break;
     case 'dsel-clear': S.designSel.clear(); render(); break;
+    case 'catalogue-publish': await publishCatalogue(); break;
+    case 'catalogue-use': { const c = settings().catalogue; if (await write(() => saveSettings({ catalogue: { ...c, on: !c.on } }))) toast(c.on ? 'Messages use the links in Connections again' : "Messages now carry each shop's own link to your online catalogue"); break; }
+    case 'kit-add': {
+      const ids = [...S.designSel]; if (!ids.length) break; const k = settings().sampleKit;
+      const next = [...new Set([...(k.designIds || []).filter((x) => S.prices.has(x)), ...ids])];
+      if (await write(() => saveSettings({ sampleKit: { ...k, designIds: next } }))) { S.designSel.clear(); toast(`${next.length} ${next.length === 1 ? 'piece' : 'pieces'} in the sample kit`); if (settings().catalogue.publishedAt) await publishCatalogue(true); }
+      break;
+    }
+    case 'kit-remove': { const k = settings().sampleKit; if (await write(() => saveSettings({ sampleKit: { ...k, designIds: (k.designIds || []).filter((x) => x !== id) } }))) { toast('Taken out of the kit'); if (settings().catalogue.publishedAt) await publishCatalogue(true); } break; }
+    case 'kit-save': {
+      const k = settings().sampleKit; const price = Math.max(0, Number(fv('kit.price', k.price)) || 0); const on = !!fv('kit.on', !!k.on);
+      if (on && !(k.designIds || []).some((x) => S.prices.has(x))) { toast('Add designs to the kit first: tick them, then tap Add to kit.'); break; }
+      if (await write(() => saveSettings({ sampleKit: { ...k, price: price || '', credit: !!fv('kit.credit', k.credit !== false), on } }))) {
+        for (const key of ['kit.price', 'kit.credit', 'kit.on']) delete S.form[key];
+        toast(on ? 'Sample kit saved and offered' : 'Sample kit saved'); if (settings().catalogue.publishedAt) await publishCatalogue(true);
+      }
+      break;
+    }
     case 'photo-remove': {
       if (!armed(el.dataset.key)) break; const d = S.prices.get(id); const pid = el.dataset.val; if (!d) break;
       const ph = (d.photos || []).find((p) => p.id === pid); if (!ph) break;
@@ -5363,7 +5496,7 @@ async function onClick(e) {
     /* prices */
     case 'pc-save-rates': {
       const r = pcRates(); const n = (v) => (v === '' || v == null ? '' : Math.max(0, Number(v) || 0));
-      const pricing = { ...settings().pricing, gold24: n(r.gold24), silver: n(r.silver), round: Math.max(0, Number(r.round) || 0), rates: Object.fromEntries(FX.map(([c]) => [c, n(r.rates[c])])), ratesAt: todayStr() };
+      const pricing = { ...settings().pricing, gold24: n(r.gold24), silver: n(r.silver), round: Math.max(0, Number(r.round) || 0), retailMarkup: Number(r.retailMarkup) > 0 ? Number(r.retailMarkup) : 2.5, retailVat: r.retailVat === '' || r.retailVat == null ? 20 : Math.max(0, Number(r.retailVat) || 0), rates: Object.fromEntries(FX.map(([c]) => [c, n(r.rates[c])])), ratesAt: todayStr() };
       if (await write(() => saveSettings({ pricing }))) { S.rt = {}; toast('Rates saved'); }
       break;
     }
@@ -5635,7 +5768,7 @@ async function onSubmit(e) {
   if (kind === 'design') {
     const d = S.prices.get(S.layer.id); if (!d) { closeLayer(); return; }
     const code = String(fv('de.code', (d.inputs || {}).code || '')).trim(); if (!code) { toast('Add a code or name.'); return; }
-    const cat = fv('de.cat', d.category || ''); const patch = { inputs: { ...(d.inputs || {}), code }, category: DESIGN_CAT_LABEL[cat] ? cat : '', note: String(fv('de.note', d.note || '')).trim().slice(0, 500), updatedAt: nowIso() };
+    const cat = fv('de.cat', d.category || ''); const patch = { inputs: { ...(d.inputs || {}), code }, category: DESIGN_CAT_LABEL[cat] ? cat : '', note: String(fv('de.note', d.note || '')).trim().slice(0, 500), hidden: !fv('de.show', !d.hidden), updatedAt: nowIso() };
     if (await write(() => Data.update('prices', d.id, patch))) { S.form = {}; closeLayer(); toast('Saved'); }
     return;
   }
@@ -5881,6 +6014,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { S, Data, resumeFind, quickShops, locateCity, overpass, requestResearch, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
+window.__facet = { publishCatalogue, catalogueDoc, catalogueLink, catalogueReady, sampleKit, sampleOffer, kitPriceIn, shopPrice, retailOf, claudeDraft, viewedDesigns, ingestThreads, processInbox, S, Data, resumeFind, quickShops, locateCity, overpass, requestResearch, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
 init();
 })();

@@ -9,7 +9,7 @@
 */
 (() => {
   'use strict';
-  const BUILD = '7861e76483';
+  const BUILD = '68d9ef52d5';
   const CFG = window.OUTREACH_CONFIG || {};
   const BASE = String(CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const KEY = String(CFG.SUPABASE_KEY || '');
@@ -360,6 +360,8 @@
     },
     // each shop's own catalogue link goes through the app's link service
     linkBase: BASE + '/functions/v1/open',
+    // the app's own address: the online catalogue page sits next to it (catalogue/)
+    siteBase: new URL('./', location.href).href,
     signOut,
     // the team: everyone with their own login to this app; only the owner adds or removes people
     me: () => (session && session.user ? { id: session.user.id, email: session.user.email } : null),
