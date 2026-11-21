@@ -1397,7 +1397,8 @@ const quoteTotal = (q) => (q.lines || []).reduce((a, l) => a + (Number(l.qty) ||
 const quoteUsd = (q) => quoteTotal(q) * (q.currency === 'USD' ? 1 : Number(q.usdRate) || 0);
 // What a shop pays in all to have the pieces in its shop: goods and shipping, import duty, import tax and the
 // courier's clearance fee. UK: 0% duty with our proof of origin under the UK–India agreement (2% without), 20% VAT.
-const landedDefault = (b) => (b && b.country === UK ? { on: true, dutyPct: 0, vatPct: 20, clearance: '' } : { on: false, dutyPct: '', vatPct: '', clearance: '' });
+// UK: 0% duty (UK–India agreement) and 20% VAT, ticked. Canada: 5% GST ready; the duty depends on the metal (6.5% gold, 8.5% silver).
+const landedDefault = (b) => (b && b.country === UK ? { on: true, dutyPct: 0, vatPct: 20, clearance: '' } : b && b.country === 'Canada' ? { on: false, dutyPct: '', vatPct: 5, clearance: '' } : { on: false, dutyPct: '', vatPct: '', clearance: '' });
 function landedOf(q) {
   const l = q.landed || {}; if (!l.on || q.incoterm === 'DDP') return null;
   const goods = (q.lines || []).reduce((a, x) => a + (Number(x.qty) || 0) * (Number(x.price) || 0), 0); const ship = Number(q.shipping) || 0;
@@ -1407,7 +1408,7 @@ function landedOf(q) {
   const total = round2(goods + ship + duty + vat + clearance); const pieces = (q.lines || []).reduce((a, x) => a + (Number(x.qty) || 0), 0);
   return { goods: round2(goods), ship: round2(ship), duty, dutyPct, vat, vatPct, clearance: round2(clearance), total, net: round2(total - vat), per: pieces ? round2(total / pieces) : 0, perNet: pieces ? round2((total - vat) / pieces) : 0, pieces };
 }
-const taxWord = (b) => (b && b.country === UK ? 'VAT' : 'tax');
+const taxWord = (b) => (b && b.country === UK ? 'VAT' : b && b.country === 'Canada' ? 'GST' : 'tax');
 function landedLines(q, b) {
   const x = landedOf(q); if (!x) return [];
   const m = (v) => fmtMoney(v, q.currency); const tw = taxWord(b);
@@ -5576,7 +5577,7 @@ async function onClick(e) {
     case 'copy-draft': { const t = String(fv('draft.' + id)).trim(); if (t) copyText(t); else toast('Write or draft a reply first.'); break; }
 
     /* quotes */
-    case 'quote-new': S.quoteDraft = { businessId: id, currency: 'USD', incoterm: 'FOB', validUntil: addDays(todayStr(), 14), lines: [{ desc: '', qty: 1, price: '' }], shipping: '', notes: '', usdRate: '', landed: landedDefault(S.businesses.get(id)) }; openLayer({ kind: 'quote', businessId: id }); break;
+    case 'quote-new': { const b0 = S.businesses.get(id); const cur = currencyFor((b0 && b0.country) || ''); S.quoteDraft = { businessId: id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines: [{ desc: '', qty: 1, price: '' }], shipping: '', notes: '', usdRate: fxUsd(cur) || '', landed: landedDefault(b0) }; openLayer({ kind: 'quote', businessId: id }); break; }
     case 'quote-edit': { const q = S.quotes.get(id); if (!q) break; S.quoteDraft = { ...clone(q), id: q.id, lines: clone(q.lines || []).length ? clone(q.lines) : [{ desc: '', qty: 1, price: '' }] }; openLayer({ kind: 'quote', id, businessId: q.businessId }); break; }
     case 'ql-add': if (S.quoteDraft) { S.quoteDraft.lines.push({ desc: '', qty: 1, price: '' }); render(); const i = S.quoteDraft.lines.length - 1; const f = document.getElementById(`ql-${i}-d`); if (f) f.focus(); } break;
     case 'ql-remove': if (S.quoteDraft && S.quoteDraft.lines.length > 1) { S.quoteDraft.lines.splice(Number(el.dataset.val), 1); render(); } break;
