@@ -396,6 +396,7 @@ const S = {
   places: new Map(),
   research: new Map(),
   meetings: new Map(),
+  requests: new Map(),
   team: [],
   teamState: 'idle',
   me: null,
@@ -454,6 +455,7 @@ function settings() {
     pricing: { ...DEFAULT_PRICING, ...(s.pricing || {}), rates: { ...DEFAULT_PRICING.rates, ...((s.pricing || {}).rates || {}) } },
     catalogue: { on: false, token: '', page: '', publishedAt: '', count: 0, ...(s.catalogue && typeof s.catalogue === 'object' ? s.catalogue : {}) },
     sampleKit: { on: false, designIds: [], price: '', credit: true, ...(s.sampleKit && typeof s.sampleKit === 'object' ? s.sampleKit : {}) },
+    launch: s.launch && typeof s.launch === 'object' ? s.launch : {},
     focus: focusFrom(s.focus),
   };
 }
@@ -501,7 +503,7 @@ async function setFocus(next) {
 }
 
 /* ================= data layer ================= */
-function mapFor(coll) { return { campaigns: S.campaigns, businesses: S.businesses, quotes: S.quotes, samples: S.samples, broadcasts: S.broadcasts, posts: S.posts, orders: S.orders, prices: S.prices, trips: S.trips, inbox: S.inbox, places: S.places, research: S.research, meetings: S.meetings }[coll] || null; }
+function mapFor(coll) { return { campaigns: S.campaigns, businesses: S.businesses, quotes: S.quotes, samples: S.samples, broadcasts: S.broadcasts, posts: S.posts, orders: S.orders, prices: S.prices, trips: S.trips, inbox: S.inbox, places: S.places, research: S.research, meetings: S.meetings, requests: S.requests }[coll] || null; }
 function deepMerge(base, patch) {
   const out = { ...(base || {}) };
   for (const [k, v] of Object.entries(patch || {})) {
@@ -587,13 +589,64 @@ function stepApplies(step, b) {
   const c = contactOf(b); const has = (v) => !!String(v || '').trim();
   if (step.optinOnly && !b.waOptIn) return false;
   const ch = effectiveChannel(step, b);
-  if (ch === 'email') return has(c.email);
+  if (ch === 'email') return has(c.email) && !emailBad(b);
   if (ch === 'phone' || ch === 'whatsapp') return has(c.phone) || has(c.whatsapp);
   if (ch === 'instagram' || ch === 'facebook') return has(c.instagram) || has(c.facebook);
   if (ch === 'linkedin') return has(c.linkedin) || has(c.person);
   return true;
 }
 const reachable = (b) => stepsFor(seqKindOf(b)).some((step) => stepApplies(step, b));
+/* ---------- email check: can a shop's address receive mail? Asked of Google's public DNS before the first email,
+   so addresses that would bounce are left out and a new sending domain keeps a clean record. ---------- */
+const EMAIL_RE = /^[^\s@"<>(),;:]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+const CHECK_DAYS = 30;
+const emailNow = (b) => String(contactOf(b).email || '').trim().toLowerCase();
+function emailCheckOf(b) { const x = b && b.emailCheck; const e = emailNow(b); return x && e && x.email === e ? x : null; }
+const emailBad = (b) => { const x = emailCheckOf(b); return !!(x && x.ok === false); };
+const EMAIL_WHY = { invalid: "it isn't a complete email address", no_domain: "its domain doesn't exist", no_mail: "its domain doesn't take email" };
+async function dnsAsk(name, type) {
+  const r = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`, { headers: { accept: 'application/dns-json' }, cache: 'no-store', credentials: 'omit' });
+  if (!r.ok) throw new Error('dns ' + r.status);
+  return r.json();
+}
+// ok true or false; null when DNS couldn't answer, and then the address is left as it is
+async function domainTakesMail(domain) {
+  const mx = await dnsAsk(domain, 'MX');
+  if (mx.Status === 3) return { ok: false, why: 'no_domain' };
+  if (mx.Status !== 0) return { ok: null };
+  const recs = (mx.Answer || []).filter((a) => a.type === 15).map((a) => String(a.data || '').trim());
+  if (recs.length) return recs.every((d) => /^0\s+\.?$/.test(d)) ? { ok: false, why: 'no_mail' } : { ok: true };
+  const a = await dnsAsk(domain, 'A');
+  if (a.Status === 0 && (a.Answer || []).some((x) => x.type === 1)) return { ok: true, why: 'a_only' };
+  return a.Status === 0 || a.Status === 3 ? { ok: false, why: 'no_mail' } : { ok: null };
+}
+async function checkEmails(ids, opts = {}) {
+  const fresh = Date.now() - CHECK_DAYS * 86400000;
+  const list = ids.map((id) => S.businesses.get(id)).filter((b) => b && emailNow(b) && (opts.force || !emailCheckOf(b) || (Date.parse(emailCheckOf(b).at) || 0) < fresh));
+  if (!list.length) return { checked: 0, bad: 0, unknown: 0 };
+  const byDomain = new Map(); const results = new Map(); const at = nowIso();
+  for (const b of list) {
+    const e = emailNow(b);
+    if (!EMAIL_RE.test(e)) { results.set(b.id, { email: e, ok: false, why: 'invalid', at }); continue; }
+    const d = e.split('@')[1]; if (!byDomain.has(d)) byDomain.set(d, []); byDomain.get(d).push(b);
+  }
+  const domains = [...byDomain.keys()]; let next = 0;
+  S.ui.emailCheck = { total: list.length, done: results.size }; schedule();
+  async function worker() {
+    while (next < domains.length) {
+      const d = domains[next++]; let res;
+      if (FREE_MAIL.has(d)) res = { ok: true, why: 'free_mail' };
+      else { try { res = await domainTakesMail(d); } catch { res = { ok: null }; } }
+      for (const b of byDomain.get(d)) if (res.ok !== null) results.set(b.id, { email: emailNow(b), ok: res.ok, ...(res.why ? { why: res.why } : {}), at });
+      S.ui.emailCheck.done += byDomain.get(d).length; schedule();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, domains.length) }, worker));
+  const items = [...results.entries()].map(([id, emailCheck]) => [id, { emailCheck }]);
+  if (items.length) await write(() => Data.updateMany('businesses', items));
+  S.ui.emailCheck = null; schedule();
+  return { checked: items.length, bad: items.filter(([, x]) => x.emailCheck.ok === false).length, unknown: list.length - items.length };
+}
 function stepState(b, st) {
   const today = todayStr();
   return stepsFor(seqKindOf(b), st).map((step) => {
@@ -1124,14 +1177,14 @@ function trackedLink(b, kind) {
   return trackingOn() && b && b.track ? `${trackBase()}/${kind}/${b.track}` : plain;
 }
 function opensOf(b) {
-  const o = (b && b.opens) || {}; const c = o.catalogue || {}, p = o.prices || {}, k = o.kit || {}; const ds = o.designs && typeof o.designs === 'object' ? o.designs : {};
-  const nc = Number(c.n) || 0, np = Number(p.n) || 0, nk = Number(k.n) || 0, nd = Object.keys(ds).length; if (!nc && !np && !nk && !nd) return null;
-  const last = [c.last, p.last, k.last, ...Object.values(ds).map((x) => x && x.last)].filter(Boolean).sort().pop() || '';
-  return { n: nc + np, c: nc, p: np, kit: nk ? k : null, designs: nd, last, what: nc && np ? 'catalogue and prices' : np && !nc ? 'price list' : 'catalogue' };
+  const o = (b && b.opens) || {}; const c = o.catalogue || {}, p = o.prices || {}, k = o.kit || {}, q = o.request || {}; const ds = o.designs && typeof o.designs === 'object' ? o.designs : {};
+  const nc = Number(c.n) || 0, np = Number(p.n) || 0, nk = Number(k.n) || 0, nq = Number(q.n) || 0, nd = Object.keys(ds).length; if (!nc && !np && !nk && !nq && !nd) return null;
+  const last = [c.last, p.last, k.last, q.last, ...Object.values(ds).map((x) => x && x.last)].filter(Boolean).sort().pop() || '';
+  return { n: nc + np, c: nc, p: np, kit: nk ? k : null, quote: nq ? q : null, designs: nd, last, what: nc && np ? 'catalogue and prices' : np && !nc ? 'price list' : 'catalogue' };
 }
 function opensChip(b) {
   const o = opensOf(b); if (!o) return '';
-  return `${o.n || o.designs ? `<span class="chip accent" title="Opened through their own link">${ico('spark')}Opened ${esc(o.what)}${o.n > 1 ? ` ${o.n}×` : ''}${o.last ? ` · ${esc(fmtWhen(o.last))}` : ''}</span>` : ''}${o.kit ? `<span class="chip gold">${ico('gem')}Asked about the sample kit</span>` : ''}`;
+  return `${o.n || o.designs ? `<span class="chip accent" title="Opened through their own link">${ico('spark')}Opened ${esc(o.what)}${o.n > 1 ? ` ${o.n}×` : ''}${o.last ? ` · ${esc(fmtWhen(o.last))}` : ''}</span>` : ''}${o.kit ? `<span class="chip gold">${ico('gem')}Asked about the sample kit</span>` : ''}${o.quote ? `<span class="chip gold">${ico('doc')}Asked for a quote</span>` : ''}`;
 }
 // The designs a shop opened on the online catalogue, most recent first.
 function viewedDesigns(b) {
@@ -1142,7 +1195,7 @@ function viewedDesigns(b) {
 function catalogueViewsPanel(b) {
   const o = opensOf(b); if (!o) return '';
   const v = viewedDesigns(b); const opened = [o.c ? `catalogue ${o.c}×` : '', o.p ? `price list ${o.p}×` : ''].filter(Boolean).join(', ');
-  const rows = [['Opened', opened ? `${opened}${o.last ? `, last ${fmtWhen(o.last)}` : ''}` : ''], ['Looked at', v.map((x) => `${x.name}${x.n > 1 ? ` (${x.n}×)` : ''}`).join(', ')], ['Sample kit', o.kit ? `Asked ${fmtWhen(o.kit.last)}${Number(o.kit.n) > 1 ? ` (${o.kit.n}×)` : ''}` : '']].filter((r) => r[1]);
+  const rows = [['Opened', opened ? `${opened}${o.last ? `, last ${fmtWhen(o.last)}` : ''}` : ''], ['Looked at', v.map((x) => `${x.name}${x.n > 1 ? ` (${x.n}×)` : ''}`).join(', ')], ['Sample kit', o.kit ? `Asked ${fmtWhen(o.kit.last)}${Number(o.kit.n) > 1 ? ` (${o.kit.n}×)` : ''}` : ''], ['Quote request', o.quote ? `Sent ${fmtWhen(o.quote.last)}${Number(o.quote.n) > 1 ? ` (${o.quote.n}×)` : ''}` : '']].filter((r) => r[1]);
   return `<section class="panel"><h3>Your catalogue</h3><dl class="kv">${rows.map(([k, val]) => `<dt>${k}</dt><dd>${esc(val)}</dd>`).join('')}</dl>${v.length || o.kit ? '<p class="hint" style="margin:0">Mention the designs they looked at when you call or write.</p>' : ''}</section>`;
 }
 // Opened in the last three days and not talking to you yet: the shops to call first.
@@ -1294,16 +1347,93 @@ function similarPanel(b) {
     ${list.map((x) => `<div class="srow"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(x.id)}">${esc(x.name)}</button></div><div class="meta"><span>${esc([x.city, x.country].filter(Boolean).join(', '))}</span>${x.labGrown ? '<span class="labmark">sells lab-grown</span>' : ''}</div></div><div class="actions"><button type="button" class="btn small" data-act="camp-one" data-id="${esc(x.id)}">${ico('megaphone')}Start</button></div></div>`).join('')}</section>`;
 }
 
+/* ---------- quote requests: designs and quantities a shop sent from the online catalogue ---------- */
+const reqItems = (r) => (Array.isArray(r && r.items) ? r.items : []);
+const newRequests = () => [...S.requests.values()].filter((r) => (r.status || 'new') === 'new').sort((a, b) => String(b.at).localeCompare(String(a.at)));
+function requestSummary(r) { const it = reqItems(r); const pcs = it.reduce((a, x) => a + (Number(x.qty) || 0), 0); return `${it.length} ${it.length === 1 ? 'design' : 'designs'}, ${pcs} ${pcs === 1 ? 'piece' : 'pieces'}`; }
+const reqMetal = (x) => (x.metal && x.metal !== 'shown' ? METAL_SHORT[x.metal] || x.metal : '');
+function requestItem(r) {
+  const b = r.businessId ? S.businesses.get(r.businessId) : null; const c = r.contact || {};
+  const name = b ? b.name : c.shop || c.name || 'A visitor to your website'; const where = (b ? [b.city, b.country] : [c.city, c.country]).filter(Boolean).join(', ');
+  const lines = reqItems(r).map((x) => `${x.qty} × ${x.code || 'design'}${reqMetal(x) ? ` in ${reqMetal(x)}` : ''}`).join(', ');
+  return `<div class="item"><div class="stack"><div class="title-row">${b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(name)}</button>` : `<b>${esc(name)}</b>`}<span class="chip gold">${ico('doc')}Quote request</span></div>
+    <div class="meta">${where ? `<span>${esc(where)}</span>` : ''}<span>${esc(requestSummary(r))}</span><span>${esc(fmtWhen(r.at))}</span>${!b && c.name && c.shop ? `<span>${esc(c.name)}</span>` : ''}${!b && c.email ? `<span class="mono sel">${esc(c.email)}</span>` : ''}</div>
+    <div class="msg">${esc(lines)}</div>${r.note ? `<div class="msg quote">${esc(trunc(r.note, 600))}</div>` : ''}</div>
+    <div class="actions"><button class="btn small primary" data-act="req-quote" data-id="${esc(r.id)}">${ico('doc')}Start the quote</button><button class="btn small quiet" data-act="req-done" data-id="${esc(r.id)}">Done</button></div></div>`;
+}
+function requestsSection(id) {
+  const list = newRequests(); if (!list.length) return '';
+  return `<section class="section"${id ? ` id="${id}"` : ''}><h2>Quote requests <span class="count">${list.length}</span></h2><p class="hint">Sent from your online catalogue. Start the quote while they're keen; it opens with their designs and quantities.</p><div class="list">${list.map(requestItem).join('')}</div></section>`;
+}
+// A request from the catalogue's own link (your website) comes from a shop you may not know yet: it becomes one.
+async function shopFromRequest(r) {
+  const c = r.contact || {}; const email = String(c.email || '').trim().toLowerCase();
+  let b = email ? allBiz().find((x) => emailNow(x) === email) : null;
+  if (!b) {
+    const id = Data.newId('businesses');
+    const doc = newBiz({ campaignId: '', name: String(c.shop || c.name || 'Website enquiry').trim().slice(0, 120), city: String(c.city || '').trim().slice(0, 80), country: String(c.country || '').trim().slice(0, 80), source: 'website', status: 'replied', notes: 'Asked for a quote on your online catalogue.', contact: { person: String(c.name || '').trim().slice(0, 120), email, phone: String(c.phone || '').trim().slice(0, 40) } });
+    if (!(await write(() => Data.set('businesses', id, doc)))) return null;
+    b = S.businesses.get(id);
+  }
+  await write(() => Data.update('requests', r.id, { businessId: b.id }));
+  await ensureLead(b.id, 'quoted');
+  return S.businesses.get(b.id);
+}
+async function quoteFromRequest(r) {
+  let b = r.businessId ? S.businesses.get(r.businessId) : null;
+  if (!b) b = await shopFromRequest(r); if (!b) return;
+  const cur = currencyFor(b.country); const rt = pcRates();
+  const lines = reqItems(r).map((x) => {
+    const d = S.prices.get(x.designId); const p = (d && d.inputs) || {}; const same = !reqMetal(x) || p.metal === x.metal;
+    const desc = d ? localTerms(pcDesc(p), b.country) : String(x.code || 'Design');
+    return { desc: same ? desc : `${desc}, made in ${reqMetal(x)} (price to confirm)`, qty: Math.max(1, Number(x.qty) || 1), price: d && same ? calcPrice({ ...p }, rt).fx[cur] || '' : '' };
+  });
+  S.quoteDraft = { businessId: b.id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines: lines.length ? lines : [{ desc: '', qty: 1, price: '' }], shipping: '', notes: '', usdRate: fxUsd(cur) || '', requestId: r.id, landed: landedDefault(b) };
+  if (lines.some((l) => !l.price)) toast('Some lines have no price yet: fill them in before you send the quote.');
+  openLayer({ kind: 'quote', businessId: b.id });
+}
 /* ---------- quotes, samples, broadcasts, seasons ---------- */
 const quoteTotal = (q) => (q.lines || []).reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.price) || 0), 0) + (Number(q.shipping) || 0);
 const quoteUsd = (q) => quoteTotal(q) * (q.currency === 'USD' ? 1 : Number(q.usdRate) || 0);
+// What a shop pays in all to have the pieces in its shop: goods and shipping, import duty, import tax and the
+// courier's clearance fee. UK: 0% duty with our proof of origin under the UK–India agreement (2% without), 20% VAT.
+const landedDefault = (b) => (b && b.country === UK ? { on: true, dutyPct: 0, vatPct: 20, clearance: '' } : { on: false, dutyPct: '', vatPct: '', clearance: '' });
+function landedOf(q) {
+  const l = q.landed || {}; if (!l.on || q.incoterm === 'DDP') return null;
+  const goods = (q.lines || []).reduce((a, x) => a + (Number(x.qty) || 0) * (Number(x.price) || 0), 0); const ship = Number(q.shipping) || 0;
+  if (!goods) return null;
+  const dutyPct = Math.max(0, Number(l.dutyPct) || 0), vatPct = Math.max(0, Number(l.vatPct) || 0), clearance = Math.max(0, Number(l.clearance) || 0);
+  const duty = round2(((goods + ship) * dutyPct) / 100); const vat = round2(((goods + ship + duty) * vatPct) / 100);
+  const total = round2(goods + ship + duty + vat + clearance); const pieces = (q.lines || []).reduce((a, x) => a + (Number(x.qty) || 0), 0);
+  return { goods: round2(goods), ship: round2(ship), duty, dutyPct, vat, vatPct, clearance: round2(clearance), total, net: round2(total - vat), per: pieces ? round2(total / pieces) : 0, perNet: pieces ? round2((total - vat) / pieces) : 0, pieces };
+}
+const taxWord = (b) => (b && b.country === UK ? 'VAT' : 'tax');
+function landedLines(q, b) {
+  const x = landedOf(q); if (!x) return [];
+  const m = (v) => fmtMoney(v, q.currency); const tw = taxWord(b);
+  return ['', 'Your full cost, delivered to your shop (estimate):', `Goods ${m(x.goods)}${x.ship ? `, shipping and insurance ${m(x.ship)}` : ''}`, `Import duty ${x.dutyPct}%: ${m(x.duty)}`, `Import ${tw} ${x.vatPct}%: ${m(x.vat)}`, ...(x.clearance ? [`Customs clearance: ${m(x.clearance)}`] : []),
+    `In all: ${m(x.total)}${x.per ? `, about ${m(x.per)} a piece` : ''}`, ...(x.vat ? [`If you're registered for ${tw}, you can usually reclaim the import ${tw}: ${m(x.net)}${x.perNet ? `, about ${m(x.perNet)} a piece` : ''}.`] : [])];
+}
+function landedHtml(q, b) {
+  const x = landedOf(q); if (!x) return ''; const e = esc; const tw = taxWord(b); const m = (v) => e(fmtMoney(v, q.currency));
+  const row = (k, v) => `<tr><td>${e(k)}</td><td class="n">${v}</td></tr>`;
+  return `<h2 style="font-size:17px;margin:22px 0 0">Your full cost, delivered to your shop (estimate)</h2><table><tbody>${row(`Goods${x.ship ? ', shipping and insurance' : ''}`, m(x.goods + x.ship))}${row(`Import duty, ${x.dutyPct}%`, m(x.duty))}${row(`Import ${tw}, ${x.vatPct}%`, m(x.vat))}${x.clearance ? row('Customs clearance', m(x.clearance)) : ''}<tr class="tot"><td>In all${x.per ? `, about ${m(x.per)} a piece` : ''}</td><td class="n">${m(x.total)}</td></tr></tbody></table>${x.vat ? `<p class="muted">If you're registered for ${e(tw)}, you can usually reclaim the import ${e(tw)}: ${m(x.net)} in all${x.perNet ? `, about ${m(x.perNet)} a piece` : ''}.</p>` : ''}`;
+}
+function landedPanel(d) {
+  const l = d.landed || {}; const b = S.businesses.get(d.businessId); const x = landedOf(d); const cur = d.currency || 'USD'; const uk = b && b.country === UK;
+  const nf = (k, label, hint) => `<div class="field"><label for="qa-${k}">${label}</label><input class="input" type="number" min="0" step="0.01" id="qa-${k}" data-q="landed.${k}" value="${esc(l[k] ?? '')}">${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const m = (v) => esc(fmtMoney(v, cur)); const tw = taxWord(b);
+  return `<section class="panel"><label class="switch"><input type="checkbox" id="qa-on" data-q="landed.on" ${l.on ? 'checked' : ''}>Show the shop its full cost, delivered</label>
+    ${!l.on ? '<p class="hint" style="margin:0">Adds import duty, import tax and the clearance fee to the quote, so the shop sees what the pieces cost it in all.</p>' : d.incoterm === 'DDP' ? "<p class=\"hint\" style=\"margin:0\">With DDP you pay the import duty and tax, so the shop's cost is the total above.</p>" : `<div class="grid3">${nf('dutyPct', 'Import duty, %', uk ? 'UK: 0% with our proof of origin under the UK–India agreement, 2% without.' : '')}${nf('vatPct', `Import ${tw}, %`, uk ? 'UK: 20%.' : '')}${nf('clearance', `Clearance fee, ${esc(cur)}`, "The courier's fee for customs, if you know it.")}</div>
+      ${x ? `<dl class="ledger"><dt>Goods${x.ship ? ', shipping and insurance' : ''}</dt><dd>${m(x.goods + x.ship)}</dd><dt>Import duty, ${x.dutyPct}%</dt><dd>${m(x.duty)}</dd><dt>Import ${tw}, ${x.vatPct}%</dt><dd>${m(x.vat)}</dd>${x.clearance ? `<dt>Clearance fee</dt><dd>${m(x.clearance)}</dd>` : ''}<dt class="tot">In all${x.per ? `, about ${m(x.per)} a piece` : ''}</dt><dd class="tot">${m(x.total)}</dd></dl>${x.vat ? `<p class="hint" style="margin:0">After reclaiming the import ${tw}: ${m(x.net)}${x.perNet ? `, about ${m(x.perNet)} a piece` : ''}.</p>` : ''}` : '<p class="hint" style="margin:0">Add prices to the items to see the full cost.</p>'}`}</section>`;
+}
 function nextQuoteNumber() { const n = [...S.quotes.values()].map((q) => Number(String(q.number || '').replace(/\D/g, '')) || 0); return 'Q-' + String(Math.max(0, ...n) + 1).padStart(4, '0'); }
 function quoteText(q, b) {
   const co = settings().company;
   const lines = (q.lines || []).map((l, i) => `${i + 1}. ${l.desc}: ${l.qty} × ${num2(l.price)} = ${num2((Number(l.qty) || 0) * (Number(l.price) || 0))}`);
   return [`Quotation ${q.number}${co.name ? ` from ${co.name}` : ''}`, `For ${b.name}, ${[b.city, b.country].filter(Boolean).join(', ')}`,
     `Date ${fmtDate(String(q.createdAt || nowIso()).slice(0, 10))}${q.validUntil ? `, valid until ${fmtDate(q.validUntil)}` : ''}`, `Terms ${q.incoterm}, prices in ${q.currency}`, '',
-    ...lines, ...(Number(q.shipping) ? [`Shipping and insurance: ${num2(q.shipping)}`] : []), `Total: ${fmtMoney(quoteTotal(q), q.currency)}`,
+    ...lines, ...(Number(q.shipping) ? [`Shipping and insurance: ${num2(q.shipping)}`] : []), `Total: ${fmtMoney(quoteTotal(q), q.currency)}`, ...landedLines(q, b),
     ...(q.notes ? ['', q.notes] : []), '', [co.senderName, co.name].filter(Boolean).join(', ')].join('\n').trim();
 }
 function quoteHtmlFile(q, b) {
@@ -1313,7 +1443,7 @@ function quoteHtmlFile(q, b) {
 <h1>Quotation ${e(q.number)}</h1><p class="muted">${e(co.name || '')}${co.address ? ' · ' + e(co.address) : ''}${co.senderEmail ? ' · ' + e(co.senderEmail) : ''}${co.whatsapp ? ' · WhatsApp ' + e(co.whatsapp) : ''}</p>
 <p><b>For</b> ${e(b.name)}, ${e([b.city, b.country].filter(Boolean).join(', '))}${contactOf(b).person ? ' · ' + e(contactOf(b).person) : ''}<br><b>Date</b> ${e(fmtDate(String(q.createdAt || nowIso()).slice(0, 10)))}${q.validUntil ? ` · <b>Valid until</b> ${e(fmtDate(q.validUntil))}` : ''}<br><b>Terms</b> ${e(q.incoterm)} · prices in ${e(q.currency)}</p>
 <table><thead><tr><th>#</th><th>Item</th><th class="n">Qty</th><th class="n">Unit price</th><th class="n">Amount</th></tr></thead><tbody>${rows}
-${Number(q.shipping) ? `<tr><td></td><td>Shipping and insurance</td><td></td><td></td><td class="n">${num2(q.shipping)}</td></tr>` : ''}<tr class="tot"><td></td><td>Total</td><td></td><td></td><td class="n">${e(fmtMoney(quoteTotal(q), q.currency))}</td></tr></tbody></table>
+${Number(q.shipping) ? `<tr><td></td><td>Shipping and insurance</td><td></td><td></td><td class="n">${num2(q.shipping)}</td></tr>` : ''}<tr class="tot"><td></td><td>Total</td><td></td><td></td><td class="n">${e(fmtMoney(quoteTotal(q), q.currency))}</td></tr></tbody></table>${landedHtml(q, b)}
 ${q.notes ? `<p class="notes">${e(q.notes)}</p>` : ''}<p class="muted">Lab-grown diamonds. Prices exclude import duty and taxes in the destination country unless the terms are DDP.</p><p>${e(co.senderName || '')}</p></body></html>`;
 }
 const trackUrl = (x) => (TRACK_URL[x.courier] && x.tracking ? TRACK_URL[x.courier] + encodeURIComponent(x.tracking) : '');
@@ -1328,7 +1458,7 @@ function audienceList(a) {
   else list = list.filter(contacted);
   if (a.countries && a.countries.length) list = list.filter((b) => a.countries.includes(b.country));
   if (a.channel === 'whatsapp') list = list.filter((b) => b.waOptIn && (contactOf(b).whatsapp || contactOf(b).phone));
-  else list = list.filter((b) => contactOf(b).email);
+  else list = list.filter((b) => contactOf(b).email && !emailBad(b));
   return list.sort((x, y) => x.name.localeCompare(y.name));
 }
 function broadcastExtra(bc) {
@@ -3108,7 +3238,7 @@ function todayData() {
   const bcs = [...S.broadcasts.values()].map((bc) => ({ bc, left: bcStats(bc).left })).filter((x) => x.left).sort((a, b) => String(b.bc.createdAt).localeCompare(String(a.bc.createdAt)));
   const mine = new Set((f.country ? [f.country] : bs.map((b) => b.country)).filter(Boolean));
   const pitch = SEASONS.filter((x) => seasonPhase(x) === 'now' && (!mine.size || x.countries.some((c) => mine.has(c))));
-  return { emails, tasks, waiting, reminders, meetings, samples, retry, bcs, pitch, orders: orderTodos(), hot: hotShops() };
+  return { emails, tasks, waiting, reminders, meetings, samples, retry, bcs, pitch, orders: orderTodos(), hot: hotShops(), requests: newRequests() };
 }
 function helloCard(t) {
   const now = new Date(); const hr = now.getHours(); const f = focusNow();
@@ -3137,6 +3267,7 @@ function helloCard(t) {
     <p class="eyebrow">${esc(dateLabel)}</p>
     ${row('chat', 'Replies waiting', w ? `<span class="hot">${w}</span>` : '0', w ? 'sec-replies' : '')}
     ${row('mail', 'To send today', send ? `${t.emails.length} ${t.emails.length === 1 ? 'email' : 'emails'}, ${t.tasks.length} ${t.tasks.length === 1 ? 'task' : 'tasks'}` : 'nothing', t.emails.length ? 'sec-emails' : t.tasks.length ? 'sec-tasks' : '')}
+    ${t.requests.length ? row('doc', 'Quote requests', `<span class="hot">${t.requests.length}</span>`, 'sec-requests') : ''}
     ${t.hot.length ? row('spark', 'Opened your catalogue', `<span class="hot">${t.hot.length}</span>`, 'sec-hot') : ''}
     ${row('meet', 'Meetings today', String(mt), mt ? 'sec-meetings' : '#meetings')}
     ${row('clock', 'Reminders', rm ? `${rm} due${late ? `, <span class="hot">${late} overdue</span>` : ''}` : 'none due', rm ? 'sec-reminders' : '')}
@@ -3145,21 +3276,51 @@ function helloCard(t) {
     <button class="btn" data-act="log-reply">${ico('chat')}Log a reply</button>
   </section>`;
 }
+/* ---------- getting ready: what's left before the first campaign ---------- */
+function launchItems() {
+  const st = settings(); const co = st.company; const designs = designList(); const withPhotos = designs.filter((d) => (d.photos || []).length).length;
+  const mail = String(co.senderEmail || '').trim().toLowerCase(); const domain = mail.includes('@') ? mail.split('@')[1] : '';
+  const ready = focusBiz().filter((b) => startable(b) && emailNow(b)); const checked = ready.filter((b) => emailCheckOf(b)).length;
+  const ra = String(st.pricing.ratesAt || '').slice(0, 10);
+  return [
+    { key: 'company', done: !!(co.name && co.senderName && co.senderEmail && co.whatsapp && co.address), title: 'Your company details', text: 'Your name, email, WhatsApp number and address go into every message and the catalogue.', to: '#connections', act: 'Open Connections' },
+    { key: 'domain', done: !!domain && !FREE_MAIL.has(domain), title: 'An email address on your own domain', text: domain && FREE_MAIL.has(domain) ? `Shops trust an address like trade@yourcompany more than a ${domain} one, and it reaches inboxes more often.` : 'Shops trust an address like trade@yourcompany more than a free one.', to: '#connections', act: 'Change it' },
+    { key: 'rates', done: !!ra && daysBetween(ra, todayStr()) <= 7, title: "This week's gold and exchange rates", text: 'Prices, quotes and the online catalogue use them. Claude brings them up to date every weekday.', to: '#prices', act: 'Open Prices' },
+    { key: 'designs', done: withPhotos >= 6, title: 'At least 6 designs with photos', text: designs.length ? `${withPhotos} of ${designs.length} ${designs.length === 1 ? 'design has' : 'designs have'} photos.` : 'Work out a piece in Prices, save it, then add photos in Designs.', to: '#designs', act: 'Open Designs' },
+    { key: 'catalogue', done: catalogueReady(), title: 'Your catalogue online', text: 'Each shop gets its own link, and you see which designs it opens.', to: '#designs', act: 'Put it online' },
+    { key: 'kit', optional: true, done: !!sampleKit(), title: 'A sample kit', text: 'A set price for a few pieces makes the first yes easy.', to: '#designs', act: 'Set it up' },
+    { key: 'emails', done: ready.length > 0 && checked === ready.length, title: `Email addresses checked${ready.length ? `, ${checked} of ${ready.length}` : ''}`, text: ready.length ? `For the shops ready to start in ${focusName()}. Addresses that can't receive mail are left out.` : `No shops with an email address are ready to start in ${focusName()} yet.`, btn: ready.length && checked < ready.length ? 'launch-check-emails' : '', act: 'Check them now', to: '#leads' },
+    { key: 'test', done: !!st.launch.testAt, title: 'A test email to yourself', text: 'Send one of your first emails to your own address, to see how it looks and that it arrives.', btn: 'launch-test-done', act: "I've sent one" },
+  ];
+}
+function launchCard() {
+  const st = settings(); if (st.launch.hidden || S.mode === 'loading') return '';
+  // Gone once outreach has really started: a shop in a running sequence, a reply, or anything sent. A lead closed
+  // by hand without any contact doesn't count.
+  if (allBiz().some((b) => ['active', 'replied'].includes(b.status) || contacted(b))) return '';
+  const items = launchItems(); const need = items.filter((x) => !x.optional); const done = need.filter((x) => x.done).length; const ck = S.ui.emailCheck;
+  const btn = (x) => x.done ? '' : x.btn ? `<button type="button" class="btn small" data-act="${x.btn}" ${ck && x.key === 'emails' ? 'disabled' : ''}>${esc(ck && x.key === 'emails' ? `Checking ${ck.done} of ${ck.total}…` : x.act)}</button>` : `<a class="btn small" href="${x.to}">${esc(x.act)}</a>`;
+  return `<section class="section" id="sec-launch"><div class="sec-head"><h2>Before your first campaign <span class="count">${done} of ${need.length}</span></h2><button type="button" class="btn small quiet" data-act="launch-hide">Hide</button></div>
+    <div class="panel"><ul class="launch">${items.map((x) => `<li class="${x.done ? 'done' : ''}"><span class="mark" aria-hidden="true">${x.done ? ico('check') : ''}</span><div class="stack"><b>${esc(x.title)}${x.optional ? ' <span class="sub">(optional)</span>' : ''}</b><span class="sub">${esc(x.text)}</span></div>${btn(x)}<span class="sr-only">${x.done ? 'Done' : 'To do'}</span></li>`).join('')}</ul>
+    <p class="hint" style="margin:0">Nothing is sent until you start a campaign. When the list is done, pick your first ${esc(String(st.sending.dailyCap))} shops in Leads and tap Start campaign.</p></div></section>`;
+}
 function todayView() {
   const t = todayData(); const st = settings();
   const retrySpan = Math.max(0, ...stepsFor('retry').map((x) => Number(x.day) || 0));
   const pitchNames = [...new Set(t.pitch.map((x) => x.name))];
   const visitsToday = tripsList().some((tr) => (tr.stops || []).some((st) => tripDay(tr.startDate, st.day) === todayStr()));
-  const quiet = !gmailOn() && !visitsToday && ![t.waiting, t.tasks, t.emails, t.orders, t.bcs, t.samples, t.reminders, t.meetings, t.retry, t.hot].some((x) => x.length);
+  const quiet = !gmailOn() && !visitsToday && ![t.waiting, t.tasks, t.emails, t.orders, t.bcs, t.samples, t.reminders, t.meetings, t.retry, t.hot, t.requests].some((x) => x.length);
   return `
   ${helloCard(t)}
   ${researchBanner()}
+  ${launchCard()}
   ${visitsTodaySection()}
   ${quiet ? emptyBox("You're all caught up. New replies, tasks and emails that fall due show up here.", `<a class="btn" href="#showrooms">${ico('store')}Showrooms</a>`) : ''}
   ${t.waiting.length || gmailOn() ? `<section class="section" id="sec-replies"><div class="sec-head"><h2>Waiting for your reply <span class="count">${t.waiting.length}</span></h2>${gmailOn() ? `<button class="btn small" data-act="gm-sync" ${S.gm.sync.running ? 'disabled' : ''}>${ico('refresh')}${S.gm.sync.running ? 'Checking Gmail…' : 'Check Gmail'}</button>` : ''}</div>
     ${gmailOn() ? `<p class="hint">${esc(syncLine())}</p>` : ''}
     ${t.waiting.length ? `<div class="list">${t.waiting.map(waitingItem).join('')}</div>` : emptyBox(gmailOn() ? 'No replies waiting. Replies from Gmail land here by themselves, and the app reminds you until you answer.' : 'No replies waiting. When a buyer answers, log it with <b>Log a reply</b> and the app reminds you until you respond.')}
   </section>` : ''}
+  ${requestsSection('sec-requests')}
   ${t.hot.length ? `<section class="section" id="sec-hot"><h2>Opened your catalogue <span class="count">${t.hot.length}</span></h2><p class="hint">They opened your catalogue or prices in the last three days. Call them while you're on their mind.</p><div class="list">${t.hot.map(hotItem).join('')}</div></section>` : ''}
   ${t.meetings.length ? `<section class="section" id="sec-meetings"><h2>Meetings today <span class="count">${t.meetings.length}</span></h2><div class="list">${t.meetings.map(meetingItem).join('')}</div></section>` : ''}
   ${t.reminders.length ? `<section class="section" id="sec-reminders"><h2>Reminders <span class="count">${t.reminders.length}</span></h2><div class="list">${t.reminders.map(reminderItem).join('')}</div></section>` : ''}
@@ -3545,7 +3706,7 @@ function repliesPart(leads, needs) {
   const openQuotes = [...S.quotes.values()].filter((q) => q.status === 'sent' && S.businesses.get(q.businessId));
   const pipeline = openQuotes.reduce((a, q) => a + quoteUsd(q), 0);
   const samplesOut = [...S.samples.values()].filter((x) => ['sent', 'delivered', 'kept'].includes(x.status) && S.businesses.get(x.businessId)).length;
-  return `<div class="tiles tight">${stageCounts.map(([k, label, n]) => `<button type="button" class="tile" data-act="lead-stage" data-val="${k}"><span class="n">${n}</span><span class="l">${label}</span></button>`).join('')}</div>
+  return `${requestsSection('')}<div class="tiles tight">${stageCounts.map(([k, label, n]) => `<button type="button" class="tile" data-act="lead-stage" data-val="${k}"><span class="n">${n}</span><span class="l">${label}</span></button>`).join('')}</div>
   ${openQuotes.length || samplesOut ? `<p class="muted" style="margin:0">${openQuotes.length ? `<b>${openQuotes.length}</b> open ${openQuotes.length === 1 ? 'quote' : 'quotes'}${pipeline ? ` worth <b>${money(pipeline)}</b>` : ''}` : ''}${openQuotes.length && samplesOut ? ' · ' : ''}${samplesOut ? `<b>${samplesOut}</b> sample ${samplesOut === 1 ? 'parcel' : 'parcels'} out` : ''}</p>` : ''}
   <div class="sec-head">${seg('leads', tab, [['needs', `Needs reply (${needs.length})`], ['answered', `Answered (${answered.length})`], ['snoozed', `Snoozed (${snoozed.length})`], ['all', `All (${leads.length})`]])}
     ${tab === 'all' ? selectHtml('f-stage', 'data-filter="leads.stage" aria-label="Stage"', STAGES, f.stage, 'Every stage') : ''}</div>
@@ -4172,6 +4333,24 @@ function priceRow(x, r) {
     <div class="meta"><span>${esc(inr(c.price))} at today's rates</span>${Object.entries(c.fx).map(([k, v]) => `<span>${esc(fxFmt(k, v))}</span>`).join('')}</div></div>
     <div class="actions"><button class="btn small" data-act="pc-load" data-id="${esc(x.id)}">Load</button>${confirmBtn('price:' + x.id, 'Delete', 'Tap again to delete', 'price-delete', `data-id="${esc(x.id)}"`)}</div></div>`;
 }
+// Claude brings the rates up to date every weekday. A change of more than a few percent waits here for a yes.
+function ratesProposal() {
+  const pr = settings().pricing; const p = pr.proposed; if (!p || typeof p !== 'object' || !p.at) return '';
+  const pct = (a, b) => { const x = Number(a) || 0, y = Number(b) || 0; return x && y ? Math.round(((y - x) / x) * 1000) / 10 : null; };
+  const rows = [['Gold 24K, ₹ a gram', pr.gold24, p.gold24], ['Silver 999, ₹ a gram', pr.silver, p.silver], ...FX.map(([c]) => [c === 'AED' ? '₹ for 1 dirham' : `₹ for ${fxFmt(c, 1)}`, pr.rates[c], (p.rates || {})[c]])].filter(([, , v]) => Number(v) > 0);
+  return `<section class="section"><div class="banner">${ico('alert')}<div class="stack" style="gap:10px"><p style="margin:0"><b>New rates from ${esc(fmtDate(String(p.at).slice(0, 10)))} move by more than ${esc(String(p.limit || 3))}%,</b> so Claude didn't use them yet. Check them, then use them or keep yours.</p>
+    <dl class="kv">${rows.map(([k, a, b]) => { const c = pct(a, b); return `<dt>${esc(k)}</dt><dd>${a ? `${esc(String(a))} → ` : ''}<b>${esc(String(b))}</b>${c !== null ? ` (${c > 0 ? '+' : ''}${c}%)` : ''}</dd>`; }).join('')}</dl>
+    <div class="actions"><button type="button" class="btn small primary" data-act="rates-use">${ico('check')}Use the new rates</button><button type="button" class="btn small" data-act="rates-keep">Keep my rates</button></div></div></div></section>`;
+}
+// When the rates change after the catalogue went online, the app brings the catalogue's prices up to date by itself.
+let autoPubKey = '';
+function queueAutoPublish() {
+  const st = settings(); const c = st.catalogue; const pr = st.pricing; const changed = String(pr.ratesUpdatedAt || pr.ratesAt || '');
+  if (S.mode !== 'db' || !S.pricesLoaded || !siteBase() || !c.publishedAt || !changed || autoPubKey === changed) return;
+  const newer = pr.ratesUpdatedAt ? String(pr.ratesUpdatedAt) > String(c.publishedAt) : String(pr.ratesAt) > String(c.publishedAt).slice(0, 10);
+  if (!newer) return;
+  autoPubKey = changed; setTimeout(() => { publishCatalogue(true); }, 1500);
+}
 function pricesView() {
   const p = pcInputs(); const r = pcRates(); const c = calcPrice(p, r); const pr = settings().pricing;
   const pf = (k, label, step = 'any', ph = '') => `<div class="field"><label for="pc-${k}">${label}</label><input class="input" id="pc-${k}" type="number" min="0" step="${step}" inputmode="decimal" data-pc="${k}" value="${esc(p[k] ?? '')}" placeholder="${esc(ph)}"></div>`;
@@ -4183,7 +4362,8 @@ function pricesView() {
   const saved = [...S.prices.values()].sort((x, y) => String((x.inputs || {}).code || '').localeCompare(String((y.inputs || {}).code || '')));
   const curOpts = fx.length ? fx.map(([k]) => [k, k]) : FX.map(([k]) => [k, k]);
   return `<header class="head"><div><h1>Prices</h1><p>Work out a wholesale price from metal, diamonds and making, then see it in pounds, dollars, euros and dirhams.</p></div></header>
-  <section class="section"><div class="sec-head"><h2>Today's rates</h2><span class="hint">${pr.ratesAt ? `Saved ${esc(fmtDate(pr.ratesAt))}` : 'Not saved yet'}</span></div>
+  ${ratesProposal()}
+  <section class="section"><div class="sec-head"><h2>Today's rates</h2><span class="hint">${pr.ratesAt ? `Saved ${esc(fmtDate(String(pr.ratesAt).slice(0, 10)))}${pr.ratesBy === 'Claude' ? ' by Claude, from IBJA and central-bank rates' : ''}` : 'Not saved yet. Claude fills them in on weekdays.'}</span></div>
     <div class="panel"><div class="grid3 nums">${rf('gold24', 'Gold 24K, ₹ a gram')}${rf('silver', 'Silver 999, ₹ a gram')}${rf('GBP', '₹ for £1')}${rf('USD', '₹ for $1')}${rf('EUR', '₹ for €1')}${rf('AED', '₹ for 1 dirham')}</div>
       <div class="grid3"><div class="field"><label for="rt-round">Round prices up to</label>${selectHtml('rt-round', 'data-rt="round"', [['1', 'The nearest 1'], ['5', 'The nearest 5'], ['10', 'The nearest 10'], ['0', "Don't round"]], String(r.round ?? 5))}</div>${sf('retailMarkup', 'UK shop mark-up, ×')}${sf('retailVat', 'UK VAT, %')}</div>
       <div class="actions"><button class="btn primary" data-act="pc-save-rates">${ico('check')}Save rates</button><span class="hint">Saved rates also fill the US$ rate on quotes and invoices.</span></div></div></section>
@@ -4308,7 +4488,7 @@ function catalogueDoc(list) {
   const st = settings(); const co = st.company; const pr = st.pricing; const r = { gold24: pr.gold24, silver: pr.silver, round: pr.round, rates: pr.rates };
   const designs = list.map((d) => {
     const p = d.inputs || {}; const c = calcPrice({ ...p }, r);
-    return { id: d.id, code: designName(d), category: d.category || 'other', desc: localTerms(pcDesc({ ...p, code: '' }), UK), metal: METAL_SHORT[p.metal] || '', weight: Number(p.weight) || 0, ct: round2((Number(p.ct1) || 0) + (Number(p.ct2) || 0)), note: String(d.note || '').slice(0, 500), photos: (d.photos || []).map((x) => ({ id: x.id, thumb: x.thumb, w: x.w, h: x.h })), price: c.fx, shopGBP: shopPrice(c.fx.GBP) };
+    return { id: d.id, code: designName(d), category: d.category || 'other', desc: localTerms(pcDesc({ ...p, code: '' }), UK), metal: METAL_SHORT[p.metal] || '', mk: p.metal || '', weight: Number(p.weight) || 0, ct: round2((Number(p.ct1) || 0) + (Number(p.ct2) || 0)), note: String(d.note || '').slice(0, 500), photos: (d.photos || []).map((x) => ({ id: x.id, thumb: x.thumb, w: x.w, h: x.h })), price: c.fx, shopGBP: shopPrice(c.fx.GBP) };
   });
   const k = sampleKit(); const ids = k ? k.ids.filter((id) => list.some((d) => d.id === id)) : [];
   return {
@@ -4544,6 +4724,8 @@ function bizDrawer(b) {
     ${catalogueViewsPanel(b)}
     ${stockPanel(b)}
     <section class="panel"><h3>Contact</h3>${rows.length ? `<dl class="kv">${rows.map(([k, v, raw]) => `<dt>${k}</dt><dd>${raw ? v : esc(v)}</dd>`).join('')}</dl>` : '<p class="hint">No contact details yet.</p>'}
+      ${emailBad(b) ? `<p class="warnline">${ico('alert')}This email address can't receive mail: ${esc(EMAIL_WHY[emailCheckOf(b).why] || EMAIL_WHY.no_mail)}. Look for another address on their website, then edit the details.</p>` : ''}
+      ${contactOf(b).email ? `<div><button type="button" class="btn small quiet" data-act="email-recheck" data-id="${esc(b.id)}">${ico('mail')}${emailCheckOf(b) ? 'Check the email address again' : 'Check the email address'}</button></div>` : ''}
       ${needsConsent(b) ? `<p class="hint">${esc(UK_EMAIL_RULE)}</p>` : ''}
       <label class="switch"><input type="checkbox" id="optin-${esc(b.id)}" data-optin="${esc(b.id)}" ${b.waOptIn ? 'checked' : ''}>WhatsApp opt-in received</label>
       <p class="hint">Turn this on only after they tapped your WhatsApp link, sent you their number, or met you in person.</p>
@@ -4646,6 +4828,7 @@ function startCampModal() {
     ${plan.waiting.length ? `<p class="warnline">${ico('alert')}${plan.waiting.length} ${plan.waiting.length === 1 ? "shop has" : "shops have"} no email, phone or Instagram yet, so ${plan.waiting.length === 1 ? 'it waits' : 'they wait'}. Start them once Claude's research finds their details.</p>` : ''}
     ${missing.length ? `<p class="warnline">${ico('alert')}Add your ${esc(listAnd(missing))} link in Connections before the first emails go: the messages use ${missing.length === 1 ? 'it' : 'them'}.</p>` : ''}
     ${uk ? `<p class="hint" style="margin:0">${uk} UK ${uk === 1 ? "shop isn't" : "shops aren't"} confirmed as limited companies yet. Their emails show a reminder to check first (UK rule).</p>` : ''}
+    <p class="hint" style="margin:0">Before the start, the app checks that each email address can receive mail. A shop whose address can't gets the other steps only.</p>
     <p class="hint" style="margin:0">${gmailOn() ? 'Emails send from your Gmail.' : 'Each day, Today lists the emails due, ready to open in your mail app and send. Automatic sending starts once Gmail sending is connected.'}</p>
     <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="submit" class="btn primary" ${n ? '' : 'disabled'}>${ico('megaphone')}Start for ${n} ${n === 1 ? 'shop' : 'shops'}</button></div>
   </form>`;
@@ -4752,6 +4935,7 @@ function quoteModal() {
       ${d.currency !== 'USD' ? `<div class="field"><label for="q-rate">1 ${esc(d.currency)} in US$, for reports</label><input class="input" type="number" min="0" step="0.0001" id="q-rate" data-q="usdRate" value="${esc(d.usdRate)}"></div>` : '<div></div>'}
       <div class="field"><span class="lab">Total</span><b class="qtotal">${esc(fmtMoney(quoteTotal(d), d.currency))}</b></div>
     </div>
+    ${landedPanel(d)}
     <div class="field"><label for="q-notes">Notes for the buyer</label><textarea class="input" id="q-notes" data-q="notes" style="min-height:70px" placeholder="Payment terms, delivery time, certificates">${esc(d.notes || '')}</textarea></div>
     <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="button" class="btn" data-act="quote-save" data-val="draft">Save draft</button><button type="button" class="btn primary" data-act="quote-save" data-val="sent">${ico('check')}Save as sent</button></div>
   </form>`;
@@ -5261,6 +5445,25 @@ async function onClick(e) {
       const r = await S.device.removeMember(id); toast(r === 'ok' ? 'Removed from the team; they are signed out everywhere' : "That didn't work. Try again."); await loadTeam(); break;
     }
     case 'camp-start': S.form = {}; openLayer({ kind: 'startcamp' }); break;
+    case 'email-recheck': { const r = await checkEmails([id], { force: true }); toast(r.checked ? (r.bad ? "This address can't receive mail." : 'This address can receive mail.') : "Couldn't check it just now. Try again later."); break; }
+    case 'launch-check-emails': {
+      const ids = focusBiz().filter((b) => startable(b) && emailNow(b)).map((b) => b.id);
+      if (!ids.length) { toast(`No shops with an email address are ready to start in ${focusName()}.`); break; }
+      const r = await checkEmails(ids);
+      toast(r.checked ? `${r.checked} ${r.checked === 1 ? 'address' : 'addresses'} checked${r.bad ? `: ${r.bad} can't receive mail and will be left out` : ', all fine'}${r.unknown ? `. ${r.unknown} couldn't be checked now` : ''}.` : r.unknown ? "Couldn't check the addresses just now. Try again later." : 'They were all checked in the last 30 days.');
+      break;
+    }
+    case 'launch-hide': await write(() => saveSettings({ launch: { ...settings().launch, hidden: true } })); toast('Hidden. Start a campaign from Leads when you are ready.'); break;
+    case 'launch-test-done': await write(() => saveSettings({ launch: { ...settings().launch, testAt: nowIso() } })); break;
+    case 'rates-use': {
+      const pr = settings().pricing; const p = pr.proposed; if (!p) break; const n = (v, d) => (Number(v) > 0 ? Number(v) : d);
+      const pricing = { ...pr, gold24: n(p.gold24, pr.gold24), silver: n(p.silver, pr.silver), rates: Object.fromEntries(FX.map(([c]) => [c, n((p.rates || {})[c], pr.rates[c])])), ratesAt: String(p.at).slice(0, 10) || todayStr(), ratesUpdatedAt: nowIso(), ratesBy: 'Claude', ratesSource: p.source || pr.ratesSource || '', proposed: null };
+      if (await write(() => saveSettings({ pricing }))) { toast('New rates in use'); queueAutoPublish(); }
+      break;
+    }
+    case 'rates-keep': if (await write(() => saveSettings({ pricing: { ...settings().pricing, proposed: null, keptAt: nowIso() } }))) toast('Kept your rates. Claude asks again if the next rates move as much.'); break;
+    case 'req-quote': { const r = S.requests.get(id); if (r) await quoteFromRequest(r); break; }
+    case 'req-done': if (await write(() => Data.update('requests', id, { status: 'done', doneAt: nowIso() }))) toast('Request marked done'); break;
     case 'camp-city': { const ids = placeIds('city', el.dataset.country || '', el.dataset.city || ''); S.form = {}; openLayer({ kind: 'startcamp', ids }); break; }
     case 'camp-one': S.form = {}; openLayer({ kind: 'startcamp', ids: [id] }); break;
     case 'close-layer': closeLayer(); break;
@@ -5373,7 +5576,7 @@ async function onClick(e) {
     case 'copy-draft': { const t = String(fv('draft.' + id)).trim(); if (t) copyText(t); else toast('Write or draft a reply first.'); break; }
 
     /* quotes */
-    case 'quote-new': S.quoteDraft = { businessId: id, currency: 'USD', incoterm: 'FOB', validUntil: addDays(todayStr(), 14), lines: [{ desc: '', qty: 1, price: '' }], shipping: '', notes: '', usdRate: '' }; openLayer({ kind: 'quote', businessId: id }); break;
+    case 'quote-new': S.quoteDraft = { businessId: id, currency: 'USD', incoterm: 'FOB', validUntil: addDays(todayStr(), 14), lines: [{ desc: '', qty: 1, price: '' }], shipping: '', notes: '', usdRate: '', landed: landedDefault(S.businesses.get(id)) }; openLayer({ kind: 'quote', businessId: id }); break;
     case 'quote-edit': { const q = S.quotes.get(id); if (!q) break; S.quoteDraft = { ...clone(q), id: q.id, lines: clone(q.lines || []).length ? clone(q.lines) : [{ desc: '', qty: 1, price: '' }] }; openLayer({ kind: 'quote', id, businessId: q.businessId }); break; }
     case 'ql-add': if (S.quoteDraft) { S.quoteDraft.lines.push({ desc: '', qty: 1, price: '' }); render(); const i = S.quoteDraft.lines.length - 1; const f = document.getElementById(`ql-${i}-d`); if (f) f.focus(); } break;
     case 'ql-remove': if (S.quoteDraft && S.quoteDraft.lines.length > 1) { S.quoteDraft.lines.splice(Number(el.dataset.val), 1); render(); } break;
@@ -5382,10 +5585,11 @@ async function onClick(e) {
       const lines = d.lines.map((l) => ({ desc: String(l.desc || '').trim(), qty: Number(l.qty) || 0, price: Number(l.price) || 0 })).filter((l) => l.desc || l.price);
       if (!lines.length) { toast('Add at least one item with a price.'); break; }
       const status = el.dataset.val === 'sent' ? (['accepted', 'declined'].includes(d.status) ? d.status : 'sent') : d.status || 'draft';
-      const doc = { businessId: d.businessId, number: d.number || nextQuoteNumber(), currency: d.currency || 'USD', incoterm: d.incoterm || 'FOB', validUntil: d.validUntil || '', lines, shipping: Number(d.shipping) || 0, notes: String(d.notes || ''), usdRate: d.currency === 'USD' ? 1 : Number(d.usdRate) || 0, status, createdAt: d.createdAt || nowIso(), sentAt: status === 'sent' ? d.sentAt || nowIso() : d.sentAt || null, decidedAt: d.decidedAt || null, isExample: !!d.isExample };
+      const doc = { businessId: d.businessId, number: d.number || nextQuoteNumber(), currency: d.currency || 'USD', incoterm: d.incoterm || 'FOB', validUntil: d.validUntil || '', lines, shipping: Number(d.shipping) || 0, notes: String(d.notes || ''), usdRate: d.currency === 'USD' ? 1 : Number(d.usdRate) || 0, status, landed: d.landed && d.landed.on ? { on: true, dutyPct: Math.max(0, Number(d.landed.dutyPct) || 0), vatPct: Math.max(0, Number(d.landed.vatPct) || 0), clearance: Math.max(0, Number(d.landed.clearance) || 0) } : { on: false }, requestId: d.requestId || null, createdAt: d.createdAt || nowIso(), sentAt: status === 'sent' ? d.sentAt || nowIso() : d.sentAt || null, decidedAt: d.decidedAt || null, isExample: !!d.isExample };
       const qid = d.id || Data.newId('quotes');
       if (await write(() => Data.set('quotes', qid, doc))) {
         await ensureLead(d.businessId, 'quoted');
+        if (d.requestId && S.requests.has(d.requestId)) await write(() => Data.update('requests', d.requestId, { status: 'quoted', quoteId: qid, doneAt: nowIso() }));
         S.quoteDraft = null; S.layer = { kind: 'biz', id: d.businessId }; render();
         toast(status === 'sent' ? `Quote ${doc.number} saved as sent. Copy it into your reply.` : `Quote ${doc.number} saved as a draft`);
       }
@@ -5496,8 +5700,8 @@ async function onClick(e) {
     /* prices */
     case 'pc-save-rates': {
       const r = pcRates(); const n = (v) => (v === '' || v == null ? '' : Math.max(0, Number(v) || 0));
-      const pricing = { ...settings().pricing, gold24: n(r.gold24), silver: n(r.silver), round: Math.max(0, Number(r.round) || 0), retailMarkup: Number(r.retailMarkup) > 0 ? Number(r.retailMarkup) : 2.5, retailVat: r.retailVat === '' || r.retailVat == null ? 20 : Math.max(0, Number(r.retailVat) || 0), rates: Object.fromEntries(FX.map(([c]) => [c, n(r.rates[c])])), ratesAt: todayStr() };
-      if (await write(() => saveSettings({ pricing }))) { S.rt = {}; toast('Rates saved'); }
+      const pricing = { ...settings().pricing, gold24: n(r.gold24), silver: n(r.silver), round: Math.max(0, Number(r.round) || 0), retailMarkup: Number(r.retailMarkup) > 0 ? Number(r.retailMarkup) : 2.5, retailVat: r.retailVat === '' || r.retailVat == null ? 20 : Math.max(0, Number(r.retailVat) || 0), rates: Object.fromEntries(FX.map(([c]) => [c, n(r.rates[c])])), ratesAt: todayStr(), ratesUpdatedAt: nowIso(), ratesBy: myName(), proposed: null };
+      if (await write(() => saveSettings({ pricing }))) { S.rt = {}; toast('Rates saved'); queueAutoPublish(); }
       break;
     }
     case 'pc-copy': {
@@ -5520,7 +5724,7 @@ async function onClick(e) {
       const b = S.businesses.get(pcInputs().buyer); if (!b) { toast('Choose the buyer to quote.'); break; }
       const p = pcInputs(); const c = calcPrice(p, pcRates()); const cur = p.cur || Object.keys(c.fx)[0] || 'GBP'; const price = c.fx[cur];
       if (!price) { toast(`Add the rupee rate for ${cur} first.`); break; }
-      S.quoteDraft = { businessId: b.id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines: [{ desc: localTerms(pcDesc(p), b.country), qty: 1, price }], shipping: '', notes: '', usdRate: fxUsd(cur) || '' };
+      S.quoteDraft = { businessId: b.id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines: [{ desc: localTerms(pcDesc(p), b.country), qty: 1, price }], shipping: '', notes: '', usdRate: fxUsd(cur) || '', landed: landedDefault(b) };
       openLayer({ kind: 'quote', businessId: b.id }); break;
     }
 
@@ -5699,7 +5903,11 @@ function onInput(e) {
   }
   if (el.dataset.seq && S.seqDraft) { const [i, f] = el.dataset.seq.split('.'); S.seqDraft[Number(i)][f] = el.value; if (f === 'channel') schedule(); else if (e.type === 'input') scheduleQuiet(); }
   if (el.dataset.tr && S.trDraft) { const [i, f] = el.dataset.tr.split('.'); S.trDraft.items[Number(i)][f] = el.value; }
-  if (el.dataset.q && S.quoteDraft) { S.quoteDraft[el.dataset.q] = el.value; if (el.tagName === 'SELECT') schedule(); else if (e.type === 'input') scheduleQuiet(); }
+  if (el.dataset.q && S.quoteDraft) {
+    const k = el.dataset.q;
+    if (k.startsWith('landed.')) { S.quoteDraft.landed = { ...(S.quoteDraft.landed || {}), [k.slice(7)]: el.type === 'checkbox' ? el.checked : el.value }; if (el.type === 'checkbox') schedule(); else if (e.type === 'input') scheduleQuiet(); }
+    else { S.quoteDraft[k] = el.value; if (el.tagName === 'SELECT') schedule(); else if (e.type === 'input') scheduleQuiet(); }
+  }
   if (el.dataset.o && S.orderDraft) {
     const k = el.dataset.o; const d = S.orderDraft; d[k] = el.value;
     if (k === 'businessId') { const nb = S.businesses.get(el.value); if (nb) { const f = newOrderDraft(nb); Object.assign(d, { buyer: f.buyer, currency: f.currency, place: f.place, usdRate: f.usdRate }); } }
@@ -5777,7 +5985,7 @@ async function onSubmit(e) {
     const cur = designCur(); const r = pcRates(); const list = selectedDesigns();
     const lines = list.map((d) => ({ desc: localTerms(pcDesc(d.inputs || {}), b.country), qty: 1, price: calcPrice({ ...(d.inputs || {}) }, r).fx[cur] || '' }));
     if (lines.some((l) => !l.price)) toast(`Some designs have no price in ${cur} yet: add today's rates in Prices.`);
-    S.form = {}; S.quoteDraft = { businessId: b.id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines, shipping: '', notes: '', usdRate: fxUsd(cur) || '' };
+    S.form = {}; S.quoteDraft = { businessId: b.id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines, shipping: '', notes: '', usdRate: fxUsd(cur) || '', landed: landedDefault(b) };
     openLayer({ kind: 'quote', businessId: b.id }); return;
   }
   if (kind === 'call') {
@@ -5807,11 +6015,12 @@ async function onSubmit(e) {
   if (kind === 'startcamp') {
     const ids = (S.layer && S.layer.ids) || [...S.selection]; const cap = Math.max(1, Number(fv('sc.cap', settings().sending.dailyCap)) || 25);
     if (cap !== Number(settings().sending.dailyCap)) await write(() => saveSettings({ sending: { ...settings().sending, dailyCap: cap } }));
+    toast('Checking the email addresses first…'); const chk = await checkEmails(ids);
     const r = await startCampaign(ids, cap);
     if (r.started) {
       const today = r.days.filter(([, d]) => d === todayStr()).length;
       S.selection.clear(); S.form = {}; closeLayer();
-      toast(`Campaign started for ${r.started} ${r.started === 1 ? 'shop' : 'shops'}${r.first === r.last ? '' : `: ${today ? `${today} today` : `from ${fmtDay(r.first)}`}, the last on ${fmtDay(r.last)}`}`);
+      toast(`Campaign started for ${r.started} ${r.started === 1 ? 'shop' : 'shops'}${r.first === r.last ? '' : `: ${today ? `${today} today` : `from ${fmtDay(r.first)}`}, the last on ${fmtDay(r.last)}`}${chk.bad ? `. ${chk.bad} email ${chk.bad === 1 ? "address doesn't" : "addresses don't"} take mail, so ${chk.bad === 1 ? 'that shop gets' : 'those shops get'} the other steps only` : ''}`);
     } else toast('None of these shops could start. They may have started already, or have no contact details yet.');
     return;
   }
@@ -5968,9 +6177,9 @@ function route() {
 }
 function subscribe() {
   const onErr = (e) => { if (e && e.code === 'revoked') S.mode = 'revoked'; toast(errorText(e)); schedule(); };
-  const watch = (coll) => DB.collection(coll).onSnapshot((snap) => { S[coll] = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); if (coll in S.loaded) S.loaded[coll] = true; if (['research', 'places', 'businesses'].includes(coll)) queueResearch(); if (coll === 'businesses') queueTracks(); schedule(); }, onErr);
-  for (const coll of ['campaigns', 'businesses', 'quotes', 'samples', 'broadcasts', 'posts', 'orders', 'prices', 'trips', 'places', 'research', 'meetings']) watch(coll);
-  DB.doc('config/settings').onSnapshot((snap) => { S.settingsDoc = snap.exists ? snap.data() : null; S.loaded.settings = true; queueTracks(); schedule(); }, onErr);
+  const watch = (coll) => DB.collection(coll).onSnapshot((snap) => { S[coll] = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); if (coll in S.loaded) S.loaded[coll] = true; if (['research', 'places', 'businesses'].includes(coll)) queueResearch(); if (coll === 'businesses') queueTracks(); if (coll === 'prices') { S.pricesLoaded = true; queueAutoPublish(); } schedule(); }, onErr);
+  for (const coll of ['campaigns', 'businesses', 'quotes', 'samples', 'broadcasts', 'posts', 'orders', 'prices', 'trips', 'places', 'research', 'meetings', 'requests']) watch(coll);
+  DB.doc('config/settings').onSnapshot((snap) => { S.settingsDoc = snap.exists ? snap.data() : null; S.loaded.settings = true; queueTracks(); queueAutoPublish(); schedule(); }, onErr);
   DB.doc('config/suppression').onSnapshot((snap) => { S.suppressDoc = snap.exists ? snap.data() : null; schedule(); }, onErr);
   if (S.device) {
     // replies a background Claude check copied from Gmail, and the addresses it should look for
@@ -6014,6 +6223,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { publishCatalogue, catalogueDoc, catalogueLink, catalogueReady, sampleKit, sampleOffer, kitPriceIn, shopPrice, retailOf, claudeDraft, viewedDesigns, ingestThreads, processInbox, S, Data, resumeFind, quickShops, locateCity, overpass, requestResearch, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
+window.__facet = { checkEmails, emailBad, emailCheckOf, domainTakesMail, launchItems, launchCard, ratesProposal, queueAutoPublish, newRequests, quoteFromRequest, shopFromRequest, landedOf, landedLines, landedHtml, quoteText, quoteHtmlFile, publishCatalogue, catalogueDoc, catalogueLink, catalogueReady, sampleKit, sampleOffer, kitPriceIn, shopPrice, retailOf, claudeDraft, viewedDesigns, ingestThreads, processInbox, S, Data, resumeFind, quickShops, locateCity, overpass, requestResearch, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag };
 init();
 })();

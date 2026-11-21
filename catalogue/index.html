@@ -14,20 +14,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&display=swap">
-<link rel="stylesheet" href="catalogue.css?v=68d9ef52d5">
+<link rel="stylesheet" href="catalogue.css?v=270f132e5e">
 </head>
 <body>
 <header class="bar">
   <div class="wrap bar-in">
     <span class="word" id="word">Catalogue</span>
-    <span class="kind" id="kind">Catalogue</span>
+    <span class="bar-right"><span class="kind" id="kind">Catalogue</span><button type="button" class="lang" id="lang" hidden>Français</button></span>
   </div>
 </header>
 
 <main class="wrap" id="main" aria-live="polite">
   <section class="hero" id="hero">
     <p class="for" id="for" hidden></p>
-    <h1>Laboratory-grown diamond jewellery</h1>
+    <h1 id="title">Laboratory-grown diamond jewellery</h1>
     <p class="lede" id="lede">Opening the catalogue…</p>
   </section>
   <nav class="cats" id="cats" aria-label="Kinds of piece" hidden></nav>
@@ -48,11 +48,28 @@
       <p class="desc" id="sheet-desc"></p>
       <dl class="facts" id="sheet-facts"></dl>
       <div class="sheet-price" id="sheet-price"></div>
+      <div class="add" id="sheet-add"></div>
       <div class="ask" id="sheet-ask"></div>
     </div>
   </div>
 </dialog>
 
-<script src="catalogue.js?v=68d9ef52d5"></script>
+<div class="reqbar" id="reqbar" hidden><div class="wrap reqbar-in"><span id="reqbar-text"></span><button type="button" class="btn light" id="reqbar-open">Review and send</button></div></div>
+
+<dialog class="sheet req" id="req" aria-labelledby="req-title">
+  <form class="req-in" id="req-form" novalidate>
+    <button type="button" class="close" id="req-close" aria-label="Close">×</button>
+    <h2 id="req-title">Ask for a quote</h2>
+    <p class="count" id="req-intro"></p>
+    <div id="req-lines"></div>
+    <label class="fld" for="req-note" id="req-note-l">A note for us (optional)<textarea id="req-note" rows="3" maxlength="1000"></textarea></label>
+    <div id="req-who" hidden></div>
+    <input type="text" name="website" id="req-hp" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+    <p class="req-msg" id="req-msg" role="status"></p>
+    <div class="ask"><button type="submit" class="btn mail" id="req-send">Send the request</button></div>
+  </form>
+</dialog>
+
+<script src="catalogue.js?v=270f132e5e"></script>
 </body>
 </html>
