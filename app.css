@@ -416,6 +416,7 @@ input.search:focus{border-color:var(--accent)}
 .launch .mark .svg{width:14px;height:14px}
 .launch li.done .mark{background:var(--good);border-color:var(--good)}
 .launch li.done b{color:var(--ink-3)}
+.launch li.bad .mark{border-color:var(--warn);background:var(--warn-soft);color:var(--warn)}
 .launch .stack{flex:1;min-width:0;gap:2px}
 .launch .btn{flex:none}
 .checklist .auto.on{color:var(--ink-2)}
