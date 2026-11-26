@@ -9,7 +9,7 @@
 */
 (() => {
   'use strict';
-  const BUILD = 'c0c1fcf38c';
+  const BUILD = '66db65298e';
   const CFG = window.OUTREACH_CONFIG || {};
   const BASE = String(CFG.SUPABASE_URL || '').replace(/\/+$/, '');
   const KEY = String(CFG.SUPABASE_KEY || '');
@@ -278,7 +278,7 @@
     try {
       // a little overlap, so a change saved while the last look was running is not missed
       const since = new Date(tsMs(cursor) - 120000).toISOString();
-      const rows = await rest('GET', `outreach_docs?select=coll,id,data,updated_at&updated_at=gte.${enc(since)}&coll=neq.photos&order=updated_at.asc&limit=1000`);
+      const rows = await rest('GET', `outreach_docs?select=coll,id,data,updated_at&updated_at=gte.${enc(since)}&coll=not.in.(photos,media)&order=updated_at.asc&limit=1000`);
       for (const r of rows) {
         bump(r.updated_at);
         if (!loaded.has(r.coll) || inFlight.get(r.coll + '/' + r.id) > 0) continue;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Catalogue</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://uhfpoduakpsagoecszpt.supabase.co; connect-src https://uhfpoduakpsagoecszpt.supabase.co; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://uhfpoduakpsagoecszpt.supabase.co; media-src https://uhfpoduakpsagoecszpt.supabase.co; connect-src https://uhfpoduakpsagoecszpt.supabase.co; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="light">
@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&display=swap">
-<link rel="stylesheet" href="catalogue.css?v=c0c1fcf38c">
+<link rel="stylesheet" href="catalogue.css?v=66db65298e">
 </head>
 <body>
 <header class="bar">
@@ -30,9 +30,11 @@
     <h1 id="title">Laboratory-grown diamond jewellery</h1>
     <p class="lede" id="lede">Opening the catalogue…</p>
   </section>
+  <section class="mine" id="mine" aria-labelledby="mine-title" hidden></section>
   <nav class="cats" id="cats" aria-label="Kinds of piece" hidden></nav>
   <section class="grid" id="grid" aria-label="Designs"></section>
   <p class="note" id="note" hidden></p>
+  <section class="cview" id="cview" hidden></section>
   <section class="kit" id="kit" hidden></section>
   <section class="contact" id="contact" hidden></section>
 </main>
@@ -70,6 +72,6 @@
   </form>
 </dialog>
 
-<script src="catalogue.js?v=c0c1fcf38c"></script>
+<script src="catalogue.js?v=66db65298e"></script>
 </body>
 </html>

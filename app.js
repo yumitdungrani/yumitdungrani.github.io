@@ -120,7 +120,7 @@ const SEQ_INTRO = {
   retry: 'Buyers who never answered get one more try, a set number of days after their first sequence ended.',
 };
 const SEQ_SHORT = { city: '', fair: 'Fair · ', retry: 'Second try · ' };
-const DEFAULT_RULES = { notNowDays: 60, reorderDays: 45, retryAfterDays: 90, sampleCheckDays: 7 };
+const DEFAULT_RULES = { notNowDays: 60, reorderDays: 45, retryAfterDays: 90, sampleCheckDays: 7, salesCheckDays: 30, goldMovePct: 2 };
 const DEFAULT_ANSWERS = [
   { id: 'a1', title: 'Minimum order', text: 'The minimum depends on the designs and quantities you choose, and you can mix designs and metals in one order. Tell me what you have in mind and I\'ll confirm it for your order.' },
   { id: 'a2', title: 'Certificates', text: 'Our main stones can come with a grading report from IGI, GIA or SGL, whichever lab you prefer.' },
@@ -131,6 +131,7 @@ const DEFAULT_ANSWERS = [
   { id: 'a7', title: 'Custom designs and private label', text: 'Yes, we make custom designs from your sketch or photo, with CAD approval before production, and we can stamp your brand on the pieces. The minimum for custom work is [MOQ].' },
   { id: 'a8', title: 'Import duty and shipping', text: 'We ship [Incoterm] with full insurance. Import duty and VAT in {{country}} are paid by [you / us], and I can add an estimate to the quote.' },
   { id: 'a9', title: 'UK import duty', text: 'Our jewellery is made in India, so under the UK–India trade agreement (in force since 15 July 2026) it enters the UK at 0% import duty instead of 2%. We send [an origin declaration on the invoice / a certificate of origin] so you can claim it. Import VAT of 20% still applies.' },
+  { id: 'a11', title: 'Shops in India', text: 'Our prices for shops in India are in rupees, plus 3% GST, with a GST invoice.' },
   { id: 'a10', title: 'UK hallmarking', text: 'In the UK, gold pieces over 1 g and silver pieces over 7.78 g need a UK hallmark before they are sold. [We send the pieces to a UK assay office for hallmarking before delivery / You hallmark them on arrival]. For the UK we make 925 silver and 14K, 18K or 22K gold, all legal UK standards.' },
 ];
 
@@ -227,8 +228,34 @@ const METAL_SHORT = Object.fromEntries(METALS.map(([k, , , sh]) => [k, sh]));
 const FX = [['GBP', '£'], ['USD', '$'], ['EUR', '€'], ['CAD', 'C$'], ['AED', 'AED ']];
 const CUR_SYM = { GBP: '£', USD: '$', EUR: '€', INR: '₹' };
 const EU = ['Germany', 'Italy', 'France', 'Netherlands', 'Belgium', 'Spain'];
+// India's GST state codes: the first two digits of a GSTIN. A sale within the seller's state carries CGST and SGST,
+// one to another state IGST; jewellery is 3% either way.
+const IN_STATES = [['01', 'Jammu and Kashmir'], ['02', 'Himachal Pradesh'], ['03', 'Punjab'], ['04', 'Chandigarh'], ['05', 'Uttarakhand'], ['06', 'Haryana'], ['07', 'Delhi'], ['08', 'Rajasthan'], ['09', 'Uttar Pradesh'], ['10', 'Bihar'], ['11', 'Sikkim'], ['12', 'Arunachal Pradesh'], ['13', 'Nagaland'], ['14', 'Manipur'], ['15', 'Mizoram'], ['16', 'Tripura'], ['17', 'Meghalaya'], ['18', 'Assam'], ['19', 'West Bengal'], ['20', 'Jharkhand'], ['21', 'Odisha'], ['22', 'Chhattisgarh'], ['23', 'Madhya Pradesh'], ['24', 'Gujarat'], ['26', 'Dadra and Nagar Haveli and Daman and Diu'], ['27', 'Maharashtra'], ['29', 'Karnataka'], ['30', 'Goa'], ['31', 'Lakshadweep'], ['32', 'Kerala'], ['33', 'Tamil Nadu'], ['34', 'Puducherry'], ['35', 'Andaman and Nicobar Islands'], ['36', 'Telangana'], ['37', 'Andhra Pradesh'], ['38', 'Ladakh']];
+const IN_STATE = Object.fromEntries(IN_STATES);
+const IN_CITY_STATE = { mumbai: '27', pune: '27', nagpur: '27', delhi: '07', 'new delhi': '07', bengaluru: '29', bangalore: '29', hyderabad: '36', chennai: '33', coimbatore: '33', kolkata: '19', jaipur: '08', ahmedabad: '24', surat: '24', vadodara: '24', rajkot: '24', lucknow: '09', kanpur: '09', indore: '23', bhopal: '23', patna: '10', kochi: '32', thrissur: '32', chandigarh: '04', ludhiana: '03', amritsar: '03', guwahati: '18', bhubaneswar: '21', visakhapatnam: '37', vijayawada: '37', goa: '30', panaji: '30', raipur: '22', ranchi: '20', dehradun: '05', gurugram: '06', gurgaon: '06', noida: '09' };
+const GST_JEWELLERY = 3;
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+// The last character of a GSTIN is a check on the other fourteen: it catches most typing mistakes.
+function gstinOk(g) {
+  const s = String(g || '').trim().toUpperCase(); if (!GSTIN_RE.test(s)) return false;
+  const C = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'; let sum = 0;
+  for (let i = 0; i < 14; i++) { const v = C.indexOf(s[i]) * (i % 2 ? 2 : 1); sum += Math.floor(v / 36) + (v % 36); }
+  return C[(36 - (sum % 36)) % 36] === s[14];
+}
+const stateOfGstin = (g) => { const s = String(g || '').trim().slice(0, 2); return IN_STATE[s] ? s : ''; };
+const sellerState = () => stateOfGstin(settings().trade.gstin) || '24';
+const inIndia = (country) => country === 'India';
+// The buyer's state: from its GSTIN, else the one chosen on the invoice, else its city.
+function buyerStateOf(buyer, b) {
+  const x = buyer || {}; const g = stateOfGstin(x.gstin); if (g) return g;
+  if (IN_STATE[x.state]) return x.state;
+  return IN_CITY_STATE[String((b && b.city) || '').trim().toLowerCase()] || '';
+}
+function gstFor(buyer, b) { const st = buyerStateOf(buyer, b); return { pct: GST_JEWELLERY, kind: st && st === sellerState() ? 'local' : 'igst', state: st }; }
+const gstOn = (o) => !!(o && o.gst && Number(o.gst.pct) > 0 && o.currency === 'INR');
+const gstLabel = (g) => (g.kind === 'local' ? `CGST ${pdfN(g.pct / 2)}% + SGST ${pdfN(g.pct / 2)}%` : `IGST ${pdfN(g.pct)}%`);
 const DEFAULT_TRADE = { iec: '', gstin: '', lut: '', beneficiary: '', bankName: '', bankBranch: '', accountNo: '', ifsc: '', swift: '', adCode: '', piPrefix: 'AD/PI', port: 'Mumbai, India', paymentTerms: '50% advance by bank transfer to confirm the order. Balance before dispatch, after we send photos and certificates of the finished pieces.' };
-const DEFAULT_PRICING = { gold24: '', silver: '', wastage: 5, margin: 20, round: 5, rates: { GBP: '', USD: '', EUR: '', CAD: '', AED: '' }, ratesAt: '', retailMarkup: 2.5, retailVat: 20, retailRound: 5 };
+const DEFAULT_PRICING = { gold24: '', silver: '', wastage: 5, margin: 20, round: 5, rates: { GBP: '', USD: '', EUR: '', CAD: '', AED: '' }, ratesAt: '', retailMarkup: 2.5, retailVat: 20, retailRound: 5, roundINR: 10 };
 const GMAIL = 'Gmail';
 // Replies from Gmail: addresses on these free providers are matched one by one, never by domain
 const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk', 'ymail.com', 'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com', 'live.co.uk', 'msn.com', 'icloud.com', 'me.com', 'mac.com', 'aol.com', 'btinternet.com', 'sky.com', 'virginmedia.com', 'talktalk.net', 'protonmail.com', 'proton.me', 'mail.com', 'gmx.com', 'gmx.co.uk', 'zoho.com']);
@@ -372,6 +399,8 @@ const ICONS = {
   chev: '<path d="m7 10 5 5 5-5"/>',
   next: '<path d="m9.5 6 6 6-6 6"/>',
   meet: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.6" fill="currentColor" stroke="none"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z"/>',
+  trend: '<path d="M4 16.5l5-5 4 4 7-7"/><path d="M15 8.5h5v5"/>',
   calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h.01M12 18h.01M15 18h.01"/>',
 };
 const ico = (n, cls = 'svg') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -409,6 +438,8 @@ const S = {
   designSel: new Set(),
   photos: new Map(),
   photoWant: new Set(),
+  videos: new Map(),
+  videoWant: new Set(),
   layer: null,
   form: {},
   ui: { findOpen: {}, openPlaces: new Set(), placeShown: {}, histAll: {}, buyersShown: 100, calAll: false, orderPanel: '', visitOpen: '', tripMail: '', menu: '', placeSel: '', placePan: '', placesShown: SHOWN_STEP },
@@ -1336,6 +1367,28 @@ function trackedLink(b, kind) {
   if (!plain) return '';
   return trackingOn() && b && b.track ? `${trackBase()}/${kind}/${b.track}` : plain;
 }
+// A shop's own page: the online catalogue opened at its quotes and orders. Through the link service when tracking is
+// on (it notes the open), straight to the page otherwise.
+function shopPage(b) {
+  if (!b || !b.track) return '';
+  const c = settings().catalogue; const page = c.page || (siteBase() ? siteBase() + 'catalogue/' : '');
+  if (!page) return '';
+  return trackingOn() && c.page ? `${trackBase()}/o/${b.track}` : `${page}#t=${b.track}&o=1`;
+}
+// The customer view a shop shows its own customers: its own token, no trade prices.
+function customerPage(b) {
+  if (!b || !b.custToken) return '';
+  const c = settings().catalogue; const page = c.page || (siteBase() ? siteBase() + 'catalogue/' : '');
+  return page ? `${page}#c=${b.custToken}` : '';
+}
+// The first time a page link is needed, the shop gets its own token and the page its address.
+async function ensureShopPage(b, customer) {
+  if (!b) return '';
+  const patch = {}; if (!b.track) patch.track = newTrack(); if (customer && !b.custToken) patch.custToken = newTrack();
+  if (Object.keys(patch).length && !(await write(() => updateBiz(b.id, patch)))) return '';
+  const c = settings().catalogue; if (!c.page && siteBase()) await write(() => saveSettings({ catalogue: { ...c, page: siteBase() + 'catalogue/' } }));
+  const fresh = S.businesses.get(b.id) || b; return customer ? customerPage(fresh) : shopPage(fresh);
+}
 function opensOf(b) {
   const o = (b && b.opens) || {}; const c = o.catalogue || {}, p = o.prices || {}, k = o.kit || {}, q = o.request || {}; const ds = o.designs && typeof o.designs === 'object' ? o.designs : {};
   const nc = Number(c.n) || 0, np = Number(p.n) || 0, nk = Number(k.n) || 0, nq = Number(q.n) || 0, nd = Object.keys(ds).length; if (!nc && !np && !nk && !nq && !nd) return null;
@@ -1351,6 +1404,18 @@ function viewedDesigns(b) {
   const ds = ((b && b.opens) || {}).designs || {};
   return Object.entries(ds).filter(([, v]) => v && v.last).sort((x, y) => String(y[1].last).localeCompare(String(x[1].last)))
     .map(([id, v]) => ({ id, name: S.prices.has(id) ? designName(S.prices.get(id)) : 'a design no longer listed', n: Number(v.n) || 1, last: v.last }));
+}
+// The shop's own pages: its quotes and orders, and the customer view it can show in its shop.
+function shopPagesPanel(b) {
+  if (!siteBase() && !settings().catalogue.page) return '';
+  const o = b.opens || {}; const cv = b.customerView || {}; const used = Number((o.customer || {}).n) || 0; const pageOpens = Number((o.orders || {}).n) || 0;
+  const cvText = cv.prices ? `Shows its prices to customers: your price × ${esc(pdfN(cv.markup || 2.5))}${Number(cv.tax) ? ` plus ${esc(pdfN(cv.tax))}% tax` : ''}.` : 'No prices shown to customers.';
+  return `<section class="panel"><h3>Their pages</h3>
+    <div class="srow"><div class="stack"><b>Quotes and orders</b><span class="sub">Where they accept a quote, approve a CAD drawing, follow an order and say what sold.${pageOpens ? ` Opened ${pageOpens}×.` : ''}</span></div>
+      <div class="actions"><button type="button" class="btn small" data-act="msg" data-id="${esc(b.id)}" data-mode="order">${ico('share')}Send it</button><button type="button" class="btn small quiet" data-act="page-copy" data-id="${esc(b.id)}">${ico('copy')}Copy link</button></div></div>
+    <div class="srow"><div class="stack"><b>Customer view</b><span class="sub">Your designs with ${esc(b.name)}'s name on them, no trade prices and no supplier, for their own customers. ${b.custToken ? cvText : ''}${used ? ` Used ${used}×.` : ''}</span></div>
+      <div class="actions"><button type="button" class="btn small quiet" data-act="cpage-copy" data-id="${esc(b.id)}">${ico('copy')}Copy link</button></div></div>
+  </section>`;
 }
 function catalogueViewsPanel(b) {
   const o = opensOf(b); if (!o) return '';
@@ -1393,17 +1458,85 @@ function followUpText(b, lang) {
     `I can send you prices, more photos, or ${sampleOffer(b.country)}, so you can see the quality first. Would that help?`, '',
     'Best regards,', co.senderName || '[your name]', co.name || 'Ark Diamond'].join('\n');
 }
+const firstName = (b) => String(contactOf(b).person || '').trim().split(/\s+/)[0] || '';
+const helloTo = (b, lang) => { const f = firstName(b); return lang === 'fr' ? `Bonjour${f ? ' ' + f : ''},` : `Hello ${f || 'there'},`; };
+function signOff(lang) { const co = settings().company; return lang === 'fr' ? ['Cordialement,', co.senderName || '[votre nom]', co.name || 'Ark Diamond'] : ['Best regards,', co.senderName || '[your name]', co.name || 'Ark Diamond']; }
+// The designs a shop told you sold best with it.
+function shopBest(b) {
+  const m = new Map();
+  for (const o of ordersOf(b.id)) if (o.sold && Array.isArray(o.sold.lines)) (o.lines || []).forEach((l, i) => { const n = Number(o.sold.lines[i]) || 0; const d = n && lineDesign(l); if (d) m.set(d.id, (m.get(d.id) || 0) + n); });
+  return [...m.entries()].sort((a, c) => c[1] - a[1]).slice(0, 3).map(([id]) => designName(S.prices.get(id)));
+}
+function reorderText(b, lang) {
+  const link = shopPage(b); const mine = shopBest(b); const ours = bestSellers().map((x) => designName(x.d)).filter((n) => !mine.includes(n)).slice(0, 3);
+  if (lang === 'fr') return [helloTo(b, 'fr'), '', `Comment se vendent les pièces de votre dernière commande ?${mine.length ? ` Chez vous, ${listEt(mine)} se vendent le mieux.` : ''}${ours.length ? ` Chez nos autres clients, les meilleures ventes du moment sont ${listEt(ours)}.` : ''}`, '', `Voulez-vous que je vous en renvoie quelques-unes, ou de nouveaux modèles à essayer ?${link ? ` Vos commandes et nos derniers modèles sont ici : ${link}` : ''}`, '', ...signOff('fr')].join('\n');
+  return [helloTo(b), '', `How are the pieces from your last order doing?${mine.length ? ` ${listAnd(mine)} ${mine.length === 1 ? 'has' : 'have'} sold best with you.` : ''}${ours.length ? ` With our other shops, the best sellers right now are ${listAnd(ours)}.` : ''}`, '', `Shall I send a few more, or some new designs to try?${link ? ` Your orders and our latest designs are here: ${link}` : ''}`, '', ...signOff('en')].join('\n');
+}
+function salesText(b, o, lang) {
+  const link = shopPage(b); const n = o ? o.number : '';
+  if (lang === 'fr') return [helloTo(b, 'fr'), '', `Votre commande ${n} est arrivée il y a environ un mois. Comment se vendent les pièces ?`, '', `Il suffit d'une minute pour nous dire combien de chaque pièce se sont vendues${link ? `, sur votre page : ${link}` : ''}. Je vous suggérerai ensuite quoi recommander.`, '', ...signOff('fr')].join('\n');
+  return [helloTo(b), '', `Your order ${n} arrived about a month ago. How are the pieces selling?`, '', `It takes a minute to tell us how many of each have sold${link ? `, on your page: ${link}` : ''}. I'll then suggest what to reorder.`, '', ...signOff('en')].join('\n');
+}
+function quoteMsgText(b, q, lang) {
+  const link = shopPage(b); const tot = q ? fmtMoney(round2(quoteTotal(q) + quoteGst(q)), q.currency) : '';
+  if (lang === 'fr') return [helloTo(b, 'fr'), '', `Votre soumission ${q ? q.number : ''} pour ${tot} est prête${q && q.validUntil ? `, valable jusqu'au ${fmtDateFr(q.validUntil)}` : ''}.${link ? ` Vous pouvez la consulter et l'accepter ici : ${link}` : ''}`, '', ...signOff('fr')].join('\n');
+  return [helloTo(b), '', `Your quote ${q ? q.number : ''} for ${tot} is ready${q && q.validUntil ? `, valid until ${fmtDate(q.validUntil)}` : ''}.${link ? ` You can see it and accept it here: ${link}` : ''}`, '', ...signOff('en')].join('\n');
+}
+function cadMsgText(b, o, lang) {
+  const link = shopPage(b); const n = o ? o.number : '';
+  if (lang === 'fr') return [helloTo(b, 'fr'), '', `Le dessin CAO de votre commande ${n} est prêt.${link ? ` Regardez-le et approuvez-le, ou dites-nous quoi modifier, ici : ${link}` : ''}`, '', 'Nous lançons la production dès que vous l’approuvez.', '', ...signOff('fr')].join('\n');
+  return [helloTo(b), '', `The CAD drawing for your order ${n} is ready.${link ? ` Please have a look and approve it, or tell us what to change, here: ${link}` : ''}`, '', 'We start production as soon as you approve it.', '', ...signOff('en')].join('\n');
+}
+function orderMsgText(b, o, lang) {
+  const link = shopPage(b); const n = o ? ` ${o.number}` : '';
+  if (lang === 'fr') return [helloTo(b, 'fr'), '', `Vous pouvez suivre votre commande${n} ici : où elle en est, les photos des pièces terminées et le suivi du colis une fois expédiée.${link ? ` ${link}` : ''}`, '', ...signOff('fr')].join('\n');
+  return [helloTo(b), '', `You can follow your order${n} here: where it is, photos of the finished pieces, and tracking once it ships.${link ? ` ${link}` : ''}`, '', ...signOff('en')].join('\n');
+}
+const MSG_TITLE = { follow: 'Follow up', reorder: 'Ask about their next order', sales: 'Ask what sold', quote: 'Send the quote', cad: 'Send the drawing for approval', order: 'Send their page' };
+function msgDefault(b, L = S.layer || {}) {
+  const lang = docLang(b); const mode = L.mode || 'follow';
+  if (mode === 'reorder') return reorderText(b, lang);
+  if (mode === 'sales') return salesText(b, S.orders.get(L.ref), lang);
+  if (mode === 'quote') return quoteMsgText(b, S.quotes.get(L.ref), lang);
+  if (mode === 'cad') return cadMsgText(b, S.orders.get(L.ref), lang);
+  if (mode === 'order') return orderMsgText(b, S.orders.get(L.ref), lang);
+  return followUpText(b, lang);
+}
+function msgSubject(b, L = S.layer || {}) {
+  const fr = docLang(b) === 'fr'; const co = settings().company.name || 'Ark Diamond'; const mode = L.mode || 'follow'; const o = S.orders.get(L.ref); const q = S.quotes.get(L.ref);
+  if (mode === 'reorder') return fr ? `Votre prochaine commande, ${co}` : `Your next order, ${co}`;
+  if (mode === 'sales') return fr ? `Comment se vendent les pièces ? Commande ${o ? o.number : ''}` : `How are the pieces selling? Order ${o ? o.number : ''}`;
+  if (mode === 'quote') return fr ? `Soumission ${q ? q.number : ''}, ${co}` : `Quote ${q ? q.number : ''} from ${co}`;
+  if (mode === 'cad') return fr ? `Dessin CAO à approuver, commande ${o ? o.number : ''}` : `CAD drawing to approve, order ${o ? o.number : ''}`;
+  if (mode === 'order') return fr ? `Votre commande${o ? ' ' + o.number : ''}, ${co}` : `Your order${o ? ' ' + o.number : ''}, ${co}`;
+  return followUpSubject(b);
+}
+// Noted when you open the message in WhatsApp or your mail app, or send it from Gmail: on the shop's timeline, and
+// on the order or quote it was about.
+async function noteMsg(id, channel, text, L = {}) {
+  const mode = L.mode || 'follow'; if (mode === 'follow') return noteFollowUp(id, channel, text);
+  const b = S.businesses.get(id); if (!b) return false; const at = nowIso();
+  const patch = { messages: [...(b.messages || []), { id: uid(), dir: 'out', channel, at, text: String(text).slice(0, MSG_MAX), by: myName() }].slice(-MSG_KEEP) };
+  if (mode === 'reorder' && b.lead) patch.lead = { followUpAt: null };
+  if (!(await write(() => updateBiz(id, patch)))) return false;
+  const stamp = { sales: 'salesAskAt', cad: 'cadSentAt', order: 'pageSentAt' }[mode];
+  if (stamp && S.orders.has(L.ref)) await write(() => Data.update('orders', L.ref, { [stamp]: at }));
+  if (mode === 'quote' && S.quotes.has(L.ref)) { const q = S.quotes.get(L.ref); await write(() => Data.update('quotes', L.ref, { linkSentAt: at, ...(q.status === 'draft' ? { status: 'sent', sentAt: at } : {}) })); }
+  return true;
+}
 const followUpSubject = (b) => (docLang(b) === 'fr' ? `Suite à notre catalogue, ${settings().company.name || 'Ark Diamond'}` : `A few designs for ${b.name}`);
 function followUpModal() {
-  const b = S.businesses.get(S.layer.id); if (!b) return '';
-  const c = contactOf(b); const text = String(fv('fu.text', followUpText(b, docLang(b)))); const wa = c.whatsapp || c.phone;
-  const canMail = !!c.email && !needsConsent(b) && !emailBad(b); const id = esc(b.id);
+  const b = S.businesses.get(S.layer.id); if (!b) return ''; const mode = S.layer.mode || 'follow';
+  const c = contactOf(b); const text = String(fv('fu.text', msgDefault(b))); const wa = c.whatsapp || c.phone;
+  const canMail = !!c.email && (mode !== 'follow' || !needsConsent(b)) && !emailBad(b); const id = esc(b.id);
+  const noLink = mode !== 'follow' && !shopPage(b);
   return `<form class="modal" role="dialog" aria-modal="true" aria-labelledby="fu-title" data-form="followup">
-    <div class="layer-head"><div><div class="eyebrow">${esc(b.name)}</div><h2 id="fu-title">Follow up</h2></div>${closeBtn()}</div>
+    <div class="layer-head"><div><div class="eyebrow">${esc(b.name)}</div><h2 id="fu-title">${esc(MSG_TITLE[mode] || 'Message')}</h2></div>${closeBtn()}</div>
+    ${noLink ? `<div class="warnline">${ico('alert')}Their page works once your app is on your phone and the catalogue page has an address. Put your catalogue online in Designs.</div>` : ''}
     <div class="field"><label for="fu-text">Your message</label><textarea class="input" id="fu-text" data-k="fu.text" style="min-height:220px">${esc(text)}</textarea></div>
     <div class="actions">${waUrl(wa) ? `<a class="btn primary" href="${esc(waUrl(wa, text))}" target="_blank" rel="noopener" data-act="fu-sent" data-id="${id}" data-val="whatsapp">${ico('bubble')}Open in WhatsApp</a>` : ''}${canMail && phoneMail() ? `<a class="btn${waUrl(wa) ? '' : ' primary'}" href="${esc(mailHref(c.email, followUpSubject(b), text))}" data-act="fu-sent" data-id="${id}" data-val="email">${ico('mail')}Open in ${mailAppName()}</a>` : ''}${canMail && gmailOn() ? `<button type="button" class="btn" data-act="fu-gmail" data-id="${id}">${ico('mail')}Send with Gmail</button>` : ''}<button type="button" class="btn quiet" data-act="fu-copy" data-id="${id}">${ico('copy')}Copy</button></div>
-    ${c.email && needsConsent(b) ? `<p class="hint" style="margin:0">${esc(UK_EMAIL_RULE)}</p>` : ''}
-    <p class="hint" style="margin:0">Once you've sent it, the shop leaves Interested shops until it opens your catalogue again.</p>
+    ${mode === 'follow' && c.email && needsConsent(b) ? `<p class="hint" style="margin:0">${esc(UK_EMAIL_RULE)}</p>` : ''}
+    <p class="hint" style="margin:0">${mode === 'follow' ? "Once you've sent it, the shop leaves Interested shops until it opens your catalogue again." : 'Opening it in WhatsApp or your mail app notes it on their timeline.'}</p>
   </form>`;
 }
 // Noted when you open the follow-up in WhatsApp or your mail app, or send it from Gmail.
@@ -1496,7 +1629,7 @@ function reminderItem(x) {
     <div class="meta"><span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span>${x.by ? `<span>set by ${esc(x.by)}</span>` : ''}</div>
     <div class="subj">${esc(x.note)}</div>
     <div class="tags">${late > 0 ? `<span class="chip warn">Overdue ${late} d</span>` : '<span class="chip accent">Due today</span>'}${b.lead ? stageChip(b.lead.stage) : stateChip(b)}${exChip(b)}</div></div>
-    <div class="actions"><button type="button" class="btn small primary" data-act="remind-done" ${ids}>${ico('check')}Done</button>${moreMenu('rm:' + x.kind + ':' + b.id, `<button type="button" class="btn small" data-act="remind-snooze" ${ids} data-when="1">${ico('clock')}Tomorrow</button><button type="button" class="btn small" data-act="remind-snooze" ${ids} data-when="7">${ico('clock')}Next week</button>`)}</div></div>`;
+    <div class="actions">${x.kind === 'follow' && hasOrdered(b) ? `<button type="button" class="btn small primary" data-act="msg" data-id="${esc(b.id)}" data-mode="reorder">${ico('share')}Message</button>` : ''}<button type="button" class="btn small${x.kind === 'follow' && hasOrdered(b) ? '' : ' primary'}" data-act="remind-done" ${ids}>${ico('check')}Done</button>${moreMenu('rm:' + x.kind + ':' + b.id, `<button type="button" class="btn small" data-act="remind-snooze" ${ids} data-when="1">${ico('clock')}Tomorrow</button><button type="button" class="btn small" data-act="remind-snooze" ${ids} data-when="7">${ico('clock')}Next week</button>`)}</div></div>`;
 }
 function remindModal() {
   const b = S.businesses.get(S.layer.businessId); if (!b) return '';
@@ -1588,14 +1721,60 @@ async function quoteFromRequest(r) {
   const lines = reqItems(r).map((x) => {
     const d = S.prices.get(x.designId); const p = (d && d.inputs) || {}; const same = !reqMetal(x) || p.metal === x.metal;
     const desc = d ? localTerms(pcDesc(p), b.country) : String(x.code || 'Design');
-    return { desc: same ? desc : `${desc}, made in ${reqMetal(x)} (price to confirm)`, qty: Math.max(1, Number(x.qty) || 1), price: d && same ? calcPrice({ ...p }, rt).fx[cur] || '' : '' };
+    return { desc: same ? desc : `${desc}, made in ${reqMetal(x)} (price to confirm)`, qty: Math.max(1, Number(x.qty) || 1), price: d && same ? calcPrice({ ...p }, rt).fx[cur] || '' : '', ...(d && same ? { designId: d.id } : {}) };
   });
   S.quoteDraft = { businessId: b.id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines: lines.length ? lines : [{ desc: '', qty: 1, price: '' }], shipping: '', notes: '', usdRate: fxUsd(cur) || '', requestId: r.id, landed: landedDefault(b) };
   if (lines.some((l) => !l.price)) toast('Some lines have no price yet: fill them in before you send the quote.');
   openLayer({ kind: 'quote', businessId: b.id });
 }
+/* ---------- gold and currencies moving under an open quote ---------- */
+// The saved rates, not what's being tried on the Prices page.
+const savedRates = () => { const pr = settings().pricing; return { gold24: pr.gold24, silver: pr.silver, round: pr.round, roundINR: pr.roundINR, rates: pr.rates }; };
+// What an open quote or proforma's pieces would cost the shop at today's gold and exchange rates, against what was
+// quoted, and what that leaves of your margin. Pieces with a set price from a price list don't follow gold, so
+// they're left out; so are lines that aren't one of your designs.
+function driftOf(doc) {
+  const r = savedRates(); const cur = doc.currency; const rate = cur === 'INR' ? 1 : Number((r.rates || {})[cur]) || 0;
+  if (!rate || !(Number(r.gold24) || Number(r.silver))) return null;
+  let quoted = 0, now = 0, cost = 0, margin = 0, ship = 0, n = 0;
+  for (const l of doc.lines || []) {
+    const d = lineDesign(l); const qty = Number(l.qty) || 0, price = Number(l.price) || 0; if (!d || !qty || !price) continue;
+    const p = d.inputs || {}; if (Number(p.fixed) > 0) continue;
+    const c = calcPrice({ ...p }, r); if (!c.price || c.missingMetal) continue;
+    quoted += qty * price; now += (qty * c.price) / rate; cost += (qty * c.cost) / rate; margin += (qty * c.margin) / rate; ship += (qty * c.shipping) / rate; n++;
+  }
+  if (!n || !quoted || !cost) return null;
+  return { pct: round2((now / quoted - 1) * 100), quoted: round2(quoted), now: round2(now), marginNow: round2(((quoted - ship - cost) / cost) * 100), marginWas: round2((margin / cost) * 100), lines: n };
+}
+const driftLimit = () => Math.max(1, Number(settings().rules.goldMovePct) || 2);
+const pctShort = (n) => String(Math.round((Number(n) || 0) * 10) / 10);
+// Open quotes, and proformas still waiting for their advance, that gold or a currency has moved past your limit;
+// once you keep a price, it's shown again only if it moves that much further.
+function driftList() {
+  const limit = driftLimit(); const today = todayStr(); const out = [];
+  const check = (kind, doc) => { const b = S.businesses.get(doc.businessId); if (!b) return; const x = driftOf(doc); if (x && x.pct >= limit && !(doc.driftOk && x.pct < Number(doc.driftOk.pct) + limit)) out.push({ kind, doc, b, x }); };
+  for (const q of S.quotes.values()) if (q.status === 'sent' && !q.isExample && !(q.validUntil && q.validUntil < today)) check('quote', q);
+  for (const o of S.orders.values()) if (o.status === 'pi' && !o.isExample && !(orderAdvance(o) > 0 && orderPaid(o) + 0.005 >= orderAdvance(o))) check('order', o);
+  return out.sort((a, b) => b.x.pct - a.x.pct);
+}
+function driftItem({ kind, doc, b, x }) {
+  const cur = doc.currency; const what = kind === 'quote' ? `Quote ${doc.number}` : `Proforma ${doc.number}`;
+  return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button><span class="chip warn">${ico('trend')}+${esc(pctShort(x.pct))}%</span></div>
+    <div class="meta"><span>${esc(what)}</span><span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span></div>
+    <div class="subj">At today's gold and exchange rates ${x.lines === (doc.lines || []).length ? 'it' : `its ${x.lines} ${x.lines === 1 ? 'design' : 'designs'}`} would come to ${esc(fmtMoney(x.now, cur))}, not the ${esc(fmtMoney(x.quoted, cur))} quoted. Your margin on ${x.lines === 1 ? 'it' : 'them'} is now about ${esc(pdfN(Math.round(x.marginNow)))}%, not ${esc(pdfN(Math.round(x.marginWas)))}%.</div></div>
+    <div class="actions"><button type="button" class="btn small primary" data-act="${kind === 'quote' ? 'requote' : 'reprice'}" data-id="${esc(doc.id)}">${ico('refresh')}${kind === 'quote' ? "Re-quote at today's prices" : "Update to today's prices"}</button><button type="button" class="btn small quiet" data-act="drift-keep" data-id="${esc(doc.id)}" data-kind="${kind}" data-val="${esc(x.pct)}">Keep the price</button></div></div>`;
+}
+// Today's prices on the lines that are your designs; the rest stay as they were.
+function repriceLines(lines, cur) {
+  const r = savedRates();
+  return clone(lines || []).map((l) => { const d = lineDesign(l); const p = d ? d.inputs || {} : null; const v = p && !(Number(p.fixed) > 0) ? calcPrice({ ...p }, r).fx[cur] : 0; return v ? { ...l, price: v, designId: d.id } : l; });
+}
+
 /* ---------- quotes, samples, broadcasts, seasons ---------- */
 const quoteTotal = (q) => (q.lines || []).reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.price) || 0), 0) + (Number(q.shipping) || 0);
+const quoteGst = (q) => (q && q.gst && Number(q.gst.pct) > 0 && q.currency === 'INR' ? round2((quoteTotal(q) * Number(q.gst.pct)) / 100) : 0);
+// A quote to a shop in India, in rupees, carries GST: CGST and SGST within Gujarat, IGST to other states.
+const quoteGstFor = (d, b) => (d.currency === 'INR' && b && inIndia(b.country) ? { pct: GST_JEWELLERY, kind: gstFor({}, b).kind } : null);
 const quoteUsd = (q) => quoteTotal(q) * (q.currency === 'USD' ? 1 : Number(q.usdRate) || 0);
 // What a shop pays in all to have the pieces in its shop: goods and shipping, import duty, import tax and the
 // courier's clearance fee. UK: 0% duty with our proof of origin under the UK–India agreement (2% without), 20% VAT.
@@ -1636,8 +1815,9 @@ function quoteText(q, b) {
   const lines = (q.lines || []).map((l, i) => `${i + 1}. ${l.desc}: ${l.qty} × ${num2(l.price)} = ${num2((Number(l.qty) || 0) * (Number(l.price) || 0))}`);
   return [`Quotation ${q.number}${co.name ? ` from ${co.name}` : ''}`, `For ${b.name}, ${[b.city, b.country].filter(Boolean).join(', ')}`,
     `Date ${fmtDate(String(q.createdAt || nowIso()).slice(0, 10))}${q.validUntil ? `, valid until ${fmtDate(q.validUntil)}` : ''}`, `Terms ${q.incoterm}, prices in ${q.currency}`, '',
-    ...lines, ...(Number(q.shipping) ? [`Shipping and insurance: ${num2(q.shipping)}`] : []), `Total: ${fmtMoney(quoteTotal(q), q.currency)}`, ...landedLines(q, b),
-    ...(q.notes ? ['', q.notes] : []), '', [co.senderName, co.name].filter(Boolean).join(', ')].join('\n').trim();
+    ...lines, ...(Number(q.shipping) ? [`Shipping and insurance: ${num2(q.shipping)}`] : []), `Total: ${fmtMoney(quoteTotal(q), q.currency)}`,
+    ...(quoteGst(q) ? [`${gstLabel(q.gst)}: ${fmtMoney(quoteGst(q), q.currency)}`, `Total with GST: ${fmtMoney(round2(quoteTotal(q) + quoteGst(q)), q.currency)}`] : []), ...landedLines(q, b),
+    ...(q.notes ? ['', q.notes] : []), ...(shopPage(b) && q.status !== 'draft' ? ['', `See it and accept it on your page: ${shopPage(b)}`] : []), '', [co.senderName, co.name].filter(Boolean).join(', ')].join('\n').trim();
 }
 function quoteHtmlFile(q, b) {
   const co = settings().company; const e = esc;
@@ -1646,8 +1826,8 @@ function quoteHtmlFile(q, b) {
 <h1>Quotation ${e(q.number)}</h1><p class="muted">${e(co.name || '')}${co.address ? ' · ' + e(co.address) : ''}${co.senderEmail ? ' · ' + e(co.senderEmail) : ''}${co.whatsapp ? ' · WhatsApp ' + e(co.whatsapp) : ''}</p>
 <p><b>For</b> ${e(b.name)}, ${e([b.city, b.country].filter(Boolean).join(', '))}${contactOf(b).person ? ' · ' + e(contactOf(b).person) : ''}<br><b>Date</b> ${e(fmtDate(String(q.createdAt || nowIso()).slice(0, 10)))}${q.validUntil ? ` · <b>Valid until</b> ${e(fmtDate(q.validUntil))}` : ''}<br><b>Terms</b> ${e(q.incoterm)} · prices in ${e(q.currency)}</p>
 <table><thead><tr><th>#</th><th>Item</th><th class="n">Qty</th><th class="n">Unit price</th><th class="n">Amount</th></tr></thead><tbody>${rows}
-${Number(q.shipping) ? `<tr><td></td><td>Shipping and insurance</td><td></td><td></td><td class="n">${num2(q.shipping)}</td></tr>` : ''}<tr class="tot"><td></td><td>Total</td><td></td><td></td><td class="n">${e(fmtMoney(quoteTotal(q), q.currency))}</td></tr></tbody></table>${landedHtml(q, b)}
-${q.notes ? `<p class="notes">${e(q.notes)}</p>` : ''}<p class="muted">Lab-grown diamonds. Prices exclude import duty and taxes in the destination country unless the terms are DDP.</p><p>${e(co.senderName || '')}</p></body></html>`;
+${Number(q.shipping) ? `<tr><td></td><td>Shipping and insurance</td><td></td><td></td><td class="n">${num2(q.shipping)}</td></tr>` : ''}<tr class="tot"><td></td><td>Total</td><td></td><td></td><td class="n">${e(fmtMoney(quoteTotal(q), q.currency))}</td></tr>${quoteGst(q) ? `<tr><td></td><td>${e(gstLabel(q.gst))}</td><td></td><td></td><td class="n">${e(fmtMoney(quoteGst(q), q.currency))}</td></tr><tr class="tot"><td></td><td>Total with GST</td><td></td><td></td><td class="n">${e(fmtMoney(round2(quoteTotal(q) + quoteGst(q)), q.currency))}</td></tr>` : ''}</tbody></table>${landedHtml(q, b)}
+${q.notes ? `<p class="notes">${e(q.notes)}</p>` : ''}${shopPage(b) && q.status !== 'draft' ? `<p><a href="${e(shopPage(b))}">See this quote and accept it on your page</a></p>` : ''}<p class="muted">Lab-grown diamonds. Prices exclude import duty and taxes in the destination country unless the terms are DDP.</p><p>${e(co.senderName || '')}</p></body></html>`;
 }
 const trackUrl = (x) => (TRACK_URL[x.courier] && x.tracking ? TRACK_URL[x.courier] + encodeURIComponent(x.tracking) : '');
 function seasonWindow(x) { return { from: addDays(x.date, -PITCH_FROM), to: addDays(x.date, -PITCH_TO) }; }
@@ -1685,7 +1865,11 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const round4 = (n) => Math.round((Number(n) || 0) * 10000) / 10000;
 const ordersOf = (bid) => [...S.orders.values()].filter((o) => o.businessId === bid).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 const orderSubtotal = (o) => round2((o.lines || []).reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.price) || 0), 0));
-const orderTotal = (o) => round2(Math.max(0, orderSubtotal(o) + (Number(o.shipping) || 0) - (Number(o.discount) || 0)));
+const orderTaxable = (o) => round2(Math.max(0, orderSubtotal(o) + (Number(o.shipping) || 0) - (Number(o.discount) || 0)));
+const orderGst = (o) => { if (!gstOn(o)) return 0; const t = orderTaxable(o), pc = Number(o.gst.pct); return o.gst.kind === 'local' ? round2(2 * round2((t * pc) / 200)) : round2((t * pc) / 100); };
+// An order for a shop in India, in rupees, carries GST.
+const draftGst = (d) => { const by = d.buyer || {}; const b = S.businesses.get(d.businessId); return d.currency === 'INR' && inIndia(by.country || (b && b.country) || '') ? { pct: GST_JEWELLERY, kind: gstFor(by, b).kind } : null; };
+const orderTotal = (o) => round2(orderTaxable(o) + orderGst(o));
 const orderPct = (o) => Math.min(100, Math.max(0, o.advancePct === '' || o.advancePct == null ? 50 : Number(o.advancePct) || 0));
 const orderAdvance = (o) => round2((orderTotal(o) * orderPct(o)) / 100);
 const orderPaid = (o) => round2((o.payments || []).reduce((a, p) => a + (Number(p.amount) || 0), 0));
@@ -1711,9 +1895,11 @@ function hsFor(desc) {
   if (/gold|\b(9|10|14|18|22)\s?(k|kt|ct|carat)\b/.test(t)) return '7113.19';
   return '';
 }
-// Canadian shops pay in Canadian dollars once a CAD rate is saved on Prices; until then in US dollars.
+// Canadian shops pay in Canadian dollars once a CAD rate is saved on Prices; until then in US dollars. Shops in
+// India pay in rupees, plus GST.
 function currencyFor(country) {
   if (country === 'Canada') return Number(settings().pricing.rates.CAD) > 0 ? 'CAD' : 'USD';
+  if (country === 'India') return 'INR';
   return country === UK ? 'GBP' : country === 'United Arab Emirates' ? 'AED' : EU.includes(country) ? 'EUR' : 'USD';
 }
 // What one unit of a currency is worth in US$, from the rupee rates saved on the Prices page
@@ -1735,7 +1921,7 @@ function newOrderDraft(b) {
 }
 function orderFromQuote(q, b) {
   const d = newOrderDraft(b);
-  const lines = (q.lines || []).map((l) => ({ desc: l.desc || '', hs: hsFor(l.desc), qty: l.qty ?? 1, price: l.price ?? '' }));
+  const lines = (q.lines || []).map((l) => ({ desc: l.desc || '', hs: hsFor(l.desc), qty: l.qty ?? 1, price: l.price ?? '', ...(l.designId ? { designId: l.designId } : {}) }));
   return { ...d, quoteId: q.id, currency: q.currency || d.currency, incoterm: q.incoterm || d.incoterm, lines: lines.length ? lines : d.lines, shipping: Number(q.shipping) || '',
     usdRate: q.currency === 'USD' ? 1 : Number(q.usdRate) || fxUsd(q.currency) || '', notes: q.notes || '', fromAccepted: q.status === 'accepted' };
 }
@@ -1769,8 +1955,9 @@ async function countOrderRevenue(o) {
 function clearForm(...prefixes) { for (const k of Object.keys(S.form)) if (prefixes.some((p) => k.startsWith(p))) delete S.form[k]; }
 async function saveOrderDraft() {
   const d = S.orderDraft; if (!d) return;
-  const lines = (d.lines || []).map((l) => ({ desc: String(l.desc || '').trim(), hs: String(l.hs || '').trim() || hsFor(l.desc), qty: Math.max(0, Number(l.qty) || 0), price: Math.max(0, Number(l.price) || 0) })).filter((l) => l.desc || l.price);
-  const buyer = Object.fromEntries(['name', 'person', 'email', 'phone', 'address', 'country', 'vat'].map((k) => [k, String((d.buyer || {})[k] || '').trim()]));
+  const lines = (d.lines || []).map((l) => ({ desc: String(l.desc || '').trim(), hs: String(l.hs || '').trim() || hsFor(l.desc), qty: Math.max(0, Number(l.qty) || 0), price: Math.max(0, Number(l.price) || 0), ...(l.designId ? { designId: l.designId } : {}) })).filter((l) => l.desc || l.price);
+  const buyer = Object.fromEntries(['name', 'person', 'email', 'phone', 'address', 'country', 'vat', 'gstin', 'state'].map((k) => [k, String((d.buyer || {})[k] || '').trim()]));
+  buyer.gstin = buyer.gstin.toUpperCase();
   if (!buyer.name) { toast(d.businessId ? 'Add the buyer name.' : 'Choose the buyer first.'); return; }
   if (!lines.length) { toast('Add at least one item with a price.'); return; }
   const { id: _drop, ...base } = S.orders.get(d.id) || {};
@@ -1779,7 +1966,7 @@ async function saveOrderDraft() {
     place: String(d.place || '').trim(), port: String(d.port || '').trim(), lines, shipping: Math.max(0, Number(d.shipping) || 0), discount: Math.max(0, Number(d.discount) || 0), advancePct: orderPct(d),
     piDate: d.piDate || todayStr(), validUntil: d.validUntil || '', advanceDueAt: d.advanceDueAt || '', readyBy: d.readyBy || '', balanceDueAt: d.balanceDueAt || '',
     terms: String(d.terms || '').trim(), notes: String(d.notes || '').trim(), usdRate: d.currency === 'USD' ? 1 : Number(d.usdRate) || 0,
-    status: base.status || 'pi', statusAt: base.statusAt || { pi: nowIso() }, payments: base.payments || [], checks: base.checks || {}, fromAccepted: base.fromAccepted ?? !!d.fromAccepted,
+    status: base.status || 'pi', statusAt: base.statusAt || { pi: nowIso() }, payments: base.payments || [], checks: base.checks || {}, fromAccepted: base.fromAccepted ?? !!d.fromAccepted, gst: draftGst({ ...d, buyer }),
     createdAt: base.createdAt || nowIso(), updatedAt: nowIso(), isExample: false,
   };
   Object.assign(doc, orderSums(doc));
@@ -1792,6 +1979,25 @@ async function saveOrderDraft() {
   const dr = $('#layer .drawer'); if (dr) dr.scrollTop = 0;
   toast(d.id ? `${doc.number} saved` : `Proforma ${doc.number} is ready. Check it, then email it.`);
 }
+// Pieces ready to ship go to an order when its production starts, and come back if it's cancelled.
+async function takeStock(o) {
+  if (!o || o.stockTaken) return '';
+  const taken = {};
+  for (const l of o.lines || []) {
+    const d = lineDesign(l); const want = Math.max(0, Math.round(Number(l.qty) || 0)); if (!d || !want) continue;
+    const have = Math.max(0, (Number(d.ready) || 0) - (taken[d.id] || 0)); const n = Math.min(have, want); if (n > 0) taken[d.id] = (taken[d.id] || 0) + n;
+  }
+  const ids = Object.keys(taken); if (!ids.length) return '';
+  if (!(await write(() => Data.updateMany('prices', ids.map((id) => [id, { ready: Math.max(0, (Number(S.prices.get(id).ready) || 0) - taken[id]), updatedAt: nowIso() }]))))) return '';
+  await write(() => Data.update('orders', o.id, { stockTaken: taken }));
+  return ` From ready stock: ${ids.map((id) => `${taken[id]} × ${designName(S.prices.get(id))}`).join(', ')}.`;
+}
+async function giveStock(o) {
+  const t = o && o.stockTaken; if (!t) return;
+  const ids = Object.keys(t).filter((id) => S.prices.has(id));
+  if (ids.length) await write(() => Data.updateMany('prices', ids.map((id) => [id, { ready: (Number(S.prices.get(id).ready) || 0) + (Number(t[id]) || 0), updatedAt: nowIso() }])));
+  await write(() => Data.update('orders', o.id, { stockTaken: null }));
+}
 async function savePayment(oid) {
   const o = S.orders.get(oid); if (!o) return;
   const amount = round2(Number(fv('pay.amount', defaultPayAmount(o))));
@@ -1803,8 +2009,9 @@ async function savePayment(oid) {
   if (!(await write(() => Data.update('orders', oid, patch)))) return;
   clearForm('pay.'); S.ui.orderPanel = '';
   await countOrderRevenue(S.orders.get(oid));
+  const stock = started ? await takeStock(S.orders.get(oid)) : '';
   const due = orderDue(S.orders.get(oid) || next);
-  toast(`${fmtMoney(amount, o.currency)} recorded.${started ? ' Production can start.' : ''}${due > 0 ? ` ${fmtMoney(due, o.currency)} still to come.` : ' Paid in full.'}`);
+  toast(`${fmtMoney(amount, o.currency)} recorded.${started ? ' Production can start.' : ''}${due > 0 ? ` ${fmtMoney(due, o.currency)} still to come.` : ' Paid in full.'}${stock}`);
   render();
 }
 async function setOrderStatus(oid, v) {
@@ -1820,7 +2027,8 @@ async function setOrderStatus(oid, v) {
     await write(() => updateBiz(b.id, { lead: { followUpAt: day } }));
     toast(`Delivered. Reorder check-in set for ${fmtDay(day)}.`); return;
   }
-  toast(v === 'production' ? 'Marked in production' : v === 'ready' ? `Marked ready. Balance due by ${fmtDay(patch.balanceDueAt || o.balanceDueAt)}.` : `Marked ${ORDER_LABEL[v].toLowerCase()}`);
+  const stock = v === 'production' ? await takeStock(S.orders.get(oid)) : '';
+  toast(v === 'production' ? `Marked in production.${stock}` : v === 'ready' ? `Marked ready. Balance due by ${fmtDay(patch.balanceDueAt || o.balanceDueAt)}.` : `Marked ${ORDER_LABEL[v].toLowerCase()}`);
 }
 async function saveShipment(oid) {
   const o = S.orders.get(oid); if (!o) return;
@@ -1885,6 +2093,8 @@ function pdfWrap(s, f = 'R', size = 10, maxW = 100) {
   return out.length ? out : [''];
 }
 const pdfN = (n) => { const s = (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).replace(/\.?0+$/, ''); return s === '' || s === '-0' ? '0' : s; };
+// a file's size the way people say it: 240 KB, 3.4 MB
+const sizeText = (bytes) => { const n = Math.max(0, Number(bytes) || 0); return n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${pdfN(Math.round(n / 104857.6) / 10)} MB`; };
 function pdfDoc(meta = {}) {
   const W = 595.28, H = 841.89; const pages = []; let ops = null; const images = [];
   const col = (hex) => { const h = String(hex || '#000000').replace('#', ''); return [0, 2, 4].map((i) => pdfN(parseInt(h.slice(i, i + 2), 16) / 255)).join(' '); };
@@ -1935,7 +2145,7 @@ function piPdf(o) {
   const pdf = pdfDoc({ title: `Proforma invoice ${o.number}`, author: co.name || '' });
   const M = 46, R = pdf.W - M, CW = R - M, BOTTOM = pdf.H - 66;
   const NAVY = '#0B1124', GOLD = '#A47E35', INK = '#1E2533', MUTED = '#5F6878', LINE = '#DAD3C4', SOFT = '#F7F3EA';
-  const cur = o.currency || 'USD'; const uk = b.country === UK; const company = co.name || 'Ark Diamond';
+  const cur = o.currency || 'USD'; const uk = b.country === UK; const company = co.name || 'Ark Diamond'; const india = inIndia(b.country); const bst = india ? buyerStateOf(b) : '';
   let y = 0;
   const top = (first) => {
     pdf.addPage(); y = 58;
@@ -1960,8 +2170,8 @@ function piPdf(o) {
     return yy;
   };
   const yl = block(M, [[company, 'B', 10.5], [co.address], [[co.whatsapp ? `Phone ${co.whatsapp}` : '', co.senderEmail].filter(Boolean).join('  ·  ')], [co.website],
-    [[t.iec ? `IEC ${t.iec}` : '', t.gstin ? `GSTIN ${t.gstin}` : ''].filter(Boolean).join('  ·  ')], [t.lut ? `LUT ${t.lut}` : '']]);
-  const yr = block(X2, [[b.name, 'B', 10.5], [b.person ? `Attn. ${b.person}` : ''], [b.address], [b.country], [b.vat ? `VAT ${b.vat}` : ''], [[b.email, b.phone].filter(Boolean).join('  ·  ')]]);
+    [[!india && t.iec ? `IEC ${t.iec}` : '', t.gstin ? `GSTIN ${t.gstin}` : ''].filter(Boolean).join('  ·  ')], [!india && t.lut ? `LUT ${t.lut}` : '']]);
+  const yr = block(X2, [[b.name, 'B', 10.5], [b.person ? `Attn. ${b.person}` : ''], [b.address], [india && bst ? `${IN_STATE[bst]}, India (state code ${bst})` : b.country], [b.vat && !india ? `VAT ${b.vat}` : ''], [india && b.gstin ? `GSTIN ${b.gstin}` : ''], [[b.email, b.phone].filter(Boolean).join('  ·  ')]]);
   y = Math.max(yl, yr) + 8;
   // terms strip
   const cells = [['Currency', cur], ['Delivery terms', `${o.incoterm || ''} ${o.place || ''}`.trim() || '-'], ['Ships from', o.port || 'India'], ['Country of origin', 'India']];
@@ -1995,6 +2205,7 @@ function piPdf(o) {
   const sums = [['Subtotal', orderSubtotal(o)]];
   if (Number(o.shipping)) sums.push(['Shipping and insurance', Number(o.shipping)]);
   if (Number(o.discount)) sums.push(['Discount', -Number(o.discount)]);
+  if (gstOn(o)) { const g = orderGst(o), half = round2(g / 2); if (o.gst.kind === 'local') sums.push([`CGST ${pdfN(o.gst.pct / 2)}%`, half], [`SGST ${pdfN(o.gst.pct / 2)}%`, round2(g - half)]); else sums.push([`IGST ${pdfN(o.gst.pct)}%`, g]); }
   room(sums.length * 15 + 90, false);
   y += 18; const TX = R - 236;
   for (const [k, v] of sums) { pdf.text(TX, y, k, { size: 9, color: MUTED }); pdf.text(R - 6, y, num2(v), { size: 9, color: INK, align: 'right' }); y += 15; }
@@ -2021,7 +2232,7 @@ function piPdf(o) {
   pdf.text(R, y0 + bh - 4, co.senderName ? `${co.senderName}, authorised signatory` : 'Authorised signatory', { size: 8.2, color: MUTED, align: 'right' });
   y = y0 + bh + 20;
   // declarations
-  const notes = [
+  const notes = india ? ['All diamonds in these pieces are laboratory-grown diamonds.', 'This is a proforma invoice, not a tax invoice. The tax invoice is issued at dispatch.', ...(o.notes ? [o.notes] : [])] : [
     'All diamonds in these pieces are laboratory-grown diamonds.',
     uk ? 'Goods of Indian origin. Proof of origin for 0% UK import duty under the UK–India trade agreement comes with the shipment.' : 'Goods of Indian origin.',
     /DDP/.test(o.incoterm || '') ? 'Prices include delivery, import duty and taxes to the address above.' : 'Import VAT and any duty in the destination country are paid by the buyer.',
@@ -2053,6 +2264,113 @@ function piMail(o) {
     body: [first ? `Hello ${first},` : 'Hello,', '', `Please find attached our proforma invoice ${o.number} for ${fmtMoney(total, o.currency)}.`, '', pay, '',
       `Production starts as soon as the payment arrives${o.readyBy ? `, and the pieces should be ready by ${fmtDate(o.readyBy)}` : ''}.`, '', 'Best regards,', co.senderName || '', co.name || ''].join('\n').replace(/\n+$/, ''),
   };
+}
+
+/* ================= the GST tax invoice, for shops in India ================= */
+// Its own series, one a financial year: AD/TI/26-27/001, within GST's 16 characters.
+function nextTaxNo() {
+  const fy = finYear(todayStr()).replace(/^20/, ''); const pre = String(settings().trade.piPrefix || 'AD/PI').trim().replace(/\/+$/, '').replace(/PI$/i, 'TI') || 'TI';
+  const head = `${pre}/${fy}/`; const n = [...S.orders.values()].map((o) => String((o.tax || {}).number || '')).filter((x) => x.startsWith(head)).map((x) => Number(x.slice(head.length)) || 0);
+  return `${head}${String(Math.max(0, ...n) + 1).padStart(3, '0')}`;
+}
+const PURITY_TEXT = { silver925: '925 silver', gold9: '9K (375)', gold10: '10K (417)', gold14: '14K (585)', gold18: '18K (750)', gold22: '22K (916)' };
+const hsnOf = (l) => String(l.hs || hsFor(l.desc) || '7113').replace(/\D/g, '');
+// What the invoice will say: what's typed, else what was saved, else what the order and its designs tell.
+function taxOf(o) {
+  const x = o.tax || {}; const by = o.buyer || {}; const b = S.businesses.get(o.businessId);
+  const gstin = String(fv('tx.gstin', x.gstin ?? by.gstin ?? '')).trim().toUpperCase();
+  return {
+    number: String(fv('tx.number', x.number || nextTaxNo())).trim(), date: fv('tx.date', x.date || todayStr()) || todayStr(), gstin,
+    state: fv('tx.state', x.state || stateOfGstin(gstin) || buyerStateOf(by, b) || ''), hm: fv('tx.hm', x.hm ?? ''),
+    lines: (o.lines || []).map((l, i) => { const d = lineDesign(l); const sx = (x.lines || [])[i] || {}; return { net: fv(`tx.n${i}`, sx.net ?? lineWeights(l).w ?? ''), purity: fv(`tx.p${i}`, sx.purity ?? (d ? PURITY_TEXT[(d.inputs || {}).metal] || '' : '')) }; }),
+  };
+}
+const taxFileName = (o) => `Tax-invoice-${String((o.tax || {}).number || 'draft').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}.pdf`;
+function taxPanel(o) {
+  const t = settings().trade; const x = taxOf(o); const id = esc(o.id); const taxable = orderTaxable(o); const local = !!x.state && x.state === sellerState();
+  const g = { pct: GST_JEWELLERY, kind: local ? 'local' : 'igst' }; const tax = orderGst({ ...o, currency: 'INR', gst: g });
+  const f = (k, label, v, type = 'text', extra = '') => `<div class="field"><label for="tx-${k}">${label}</label><input class="input" id="tx-${k}" type="${type}" data-k="tx.${k}" value="${esc(v)}" ${extra}></div>`;
+  if (o.currency !== 'INR') return `<section class="panel"><h3>Tax invoice (GST)</h3><div class="warnline">${ico('alert')}A tax invoice in India is in rupees. Edit the proforma and choose INR first.</div></section>`;
+  return `<section class="panel"><h3>Tax invoice (GST)</h3>
+    ${t.gstin ? '' : `<div class="warnline">${ico('alert')}Your GSTIN isn't saved, so the invoice can't carry it. <a href="#connections">Add it in Connections</a>.</div>`}
+    <div class="grid2">${f('number', 'Invoice number', x.number, 'text', 'maxlength="16"')}${f('date', 'Invoice date', x.date, 'date')}${f('gstin', 'Their GSTIN', x.gstin, 'text', 'maxlength="15" autocapitalize="characters" data-live="1"')}<div class="field"><label for="tx-state">Their state, for the place of supply</label>${selectHtml('tx-state', 'data-k="tx.state" data-live="1"', IN_STATES.map(([c, n]) => [c, `${n} (${c})`]), x.state, 'Choose')}</div>${f('hm', 'Hallmarking charges, ₹ a piece, included in the prices', x.hm, 'number', 'min="0" step="1"')}</div>
+    ${x.gstin && !gstinOk(x.gstin) ? `<div class="warnline">${ico('alert')}That GSTIN doesn't look right: check it against their certificate.</div>` : ''}
+    ${x.number.length > 16 ? `<div class="warnline">${ico('alert')}GST invoice numbers can have up to 16 characters.</div>` : ''}
+    ${(o.lines || []).map((l, i) => `<div class="exline"><div class="exdesc">${esc(l.desc || `Item ${i + 1}`)}<span class="sub"> · ${esc(Number(l.qty) || 0)} pcs · HSN ${esc(hsnOf(l))}</span></div><div class="grid2">${f(`n${i}`, 'Net metal weight, g', x.lines[i].net, 'number', 'min="0" step="0.001"')}${f(`p${i}`, 'Purity', x.lines[i].purity)}</div></div>`).join('')}
+    <dl class="ledger"><dt>Taxable value</dt><dd>${esc(fxFmt('INR', taxable))}</dd>${local ? `<dt>CGST ${pdfN(GST_JEWELLERY / 2)}%</dt><dd>${esc(fxFmt('INR', round2(tax / 2)))}</dd><dt>SGST ${pdfN(GST_JEWELLERY / 2)}%</dt><dd>${esc(fxFmt('INR', round2(tax - round2(tax / 2))))}</dd>` : `<dt>IGST ${GST_JEWELLERY}%</dt><dd>${esc(fxFmt('INR', tax))}</dd>`}<dt class="tot">Total</dt><dd class="tot">${esc(fxFmt('INR', round2(taxable + tax)))}</dd></dl>
+    <p class="hint" style="margin:0">Each piece's net metal weight and purity are on the bill, as BIS asks of hallmarked jewellery sold between businesses too. Jewellery (HSN 7113) travels without an e-way bill, except within Kerala. If your yearly turnover is over ₹5 crore, an invoice to a business also needs its IRN from the e-invoice portal: make it there, and keep this as your copy.</p>
+    <div class="actions"><button type="button" class="btn primary" data-act="tax-make" data-id="${id}">${ico('download')}${o.tax ? 'Save and download again' : 'Make the tax invoice'}</button><button type="button" class="btn quiet" data-act="order-panel" data-id="${id}" data-val="">Close</button></div>
+  </section>`;
+}
+function taxInvoicePdf(o) {
+  const st = settings(); const co = st.company; const t = st.trade; const b = o.buyer || {}; const x = o.tax || taxOf(o);
+  const company = co.name || 'Ark Diamond'; const pdf = pdfDoc({ title: `Tax invoice ${x.number}`, author: company });
+  const M = 46, R = pdf.W - M, CW = R - M, BOTTOM = pdf.H - 66;
+  const NAVY = '#0B1124', GOLD = '#A47E35', INK = '#1E2533', MUTED = '#5F6878', LINE = '#DAD3C4', SOFT = '#F7F3EA';
+  const seller = sellerState(); const bst = x.state || buyerStateOf(b); const local = !!bst && bst === seller; const pct = gstOn(o) ? Number(o.gst.pct) : GST_JEWELLERY;
+  let y = 0;
+  const top = (first) => {
+    pdf.addPage(); y = 58;
+    pdf.text(M, y, company.toUpperCase(), { f: 'TB', size: first ? 20 : 13, sp: first ? 2.4 : 1.6, color: NAVY });
+    pdf.text(R, y, 'TAX INVOICE', { f: 'TB', size: first ? 13 : 10, sp: 1.5, color: GOLD, align: 'right' });
+    y += first ? 16 : 14;
+    if (first) { pdf.text(M, y, 'Laboratory-grown diamond jewellery', { size: 8.5, color: MUTED, sp: 0.2 }); pdf.text(R, y, `No. ${x.number}`, { f: 'B', size: 9, color: INK, align: 'right' }); y += 12; pdf.text(R, y, `Date ${fmtDate(x.date)}`, { size: 9, color: INK, align: 'right' }); }
+    else pdf.text(R, y, `${x.number}, continued`, { size: 8.5, color: MUTED, align: 'right' });
+    y += 12; pdf.line(M, y, R, y, { color: GOLD, w: 0.9 }); y += 24;
+  };
+  top(true);
+  const colW = (CW - 28) / 2; const X2 = M + colW + 28;
+  pdf.text(M, y, 'SUPPLIER', { f: 'B', size: 7.5, sp: 1.3, color: GOLD }); pdf.text(X2, y, 'RECIPIENT', { f: 'B', size: 7.5, sp: 1.3, color: GOLD });
+  const block = (bx, rows) => { let yy = y + 15; for (const [s, f = 'R', size = 9] of rows) { if (!s) continue; for (const ln of pdfWrap(s, f, size, colW)) { pdf.text(bx, yy, ln, { f, size, color: INK }); yy += size + 3.6; } } return yy; };
+  const yl = block(M, [[company, 'B', 10.5], [co.address], [t.gstin ? `GSTIN ${t.gstin}` : 'GSTIN: to be added'], [`State: ${IN_STATE[seller] || ''}, code ${seller}`], [[co.whatsapp ? `Phone ${co.whatsapp}` : '', co.senderEmail].filter(Boolean).join('  ·  ')]]);
+  const yr = block(X2, [[b.name, 'B', 10.5], [b.address], [x.gstin ? `GSTIN ${x.gstin}` : 'Not registered for GST'], [bst ? `State: ${IN_STATE[bst]}, code ${bst}` : ''], [[b.email, b.phone].filter(Boolean).join('  ·  ')]]);
+  y = Math.max(yl, yr) + 8;
+  const cells = [['Place of supply', bst ? `${IN_STATE[bst]} (${bst})` : '-'], ['Tax on reverse charge', 'No'], ['Against proforma', o.number || '-']];
+  const per = 3, cw = CW / per; pdf.rect(M, y, CW, 40, { fill: SOFT });
+  cells.forEach(([k, v], i) => { const cx = M + 12 + i * cw; pdf.text(cx, y + 17, k.toUpperCase(), { f: 'B', size: 6.8, sp: 0.9, color: MUTED }); pdf.text(cx, y + 29.5, pdfFit(v, 'R', 9.5, cw - 20), { size: 9.5, color: INK }); });
+  y += 56;
+  const COLS = [{ h: '#', w: 18 }, { h: 'Description', w: 0 }, { h: 'HSN', w: 42 }, { h: 'Qty', w: 28, right: true }, { h: 'Net wt g', w: 46, right: true }, { h: 'Purity', w: 60 }, { h: 'Rate', w: 62, right: true }, { h: 'Value INR', w: 70, right: true }];
+  COLS[1].w = CW - COLS.reduce((a, c) => a + c.w, 0);
+  const xs = []; let acc = M; for (const c of COLS) { xs.push(acc); acc += c.w; }
+  const thead = () => { pdf.rect(M, y, CW, 20, { fill: NAVY }); COLS.forEach((c, i) => pdf.text(c.right ? xs[i] + c.w - 5 : xs[i] + 5, y + 13.2, c.h, { f: 'B', size: 7.6, sp: 0.2, color: '#FFFFFF', align: c.right ? 'right' : 'left' })); y += 20; };
+  const room = (h, withHead) => { if (y + h > BOTTOM) { top(false); if (withHead) thead(); } };
+  thead();
+  (o.lines || []).forEach((l, i) => {
+    const desc = pdfWrap(l.desc || 'Item', 'R', 8.8, COLS[1].w - 10); const h = desc.length * 11 + 10; room(h, true); const ty = y + 13.5; const xl = x.lines[i] || {};
+    pdf.text(xs[0] + 5, ty, String(i + 1), { size: 8.8, color: MUTED });
+    desc.forEach((ln, k) => pdf.text(xs[1] + 5, ty + k * 11, ln, { size: 8.8, color: INK }));
+    pdf.text(xs[2] + 5, ty, hsnOf(l), { size: 8.8, color: INK });
+    pdf.text(xs[3] + COLS[3].w - 5, ty, String(Number(l.qty) || 0), { size: 8.8, color: INK, align: 'right' });
+    pdf.text(xs[4] + COLS[4].w - 5, ty, Number(xl.net) ? String(round2(Number(xl.net) * 1000) / 1000) : '', { size: 8.8, color: INK, align: 'right' });
+    pdf.text(xs[5] + 5, ty, pdfFit(String(xl.purity || ''), 'R', 8.8, COLS[5].w - 8), { size: 8.8, color: INK });
+    pdf.text(xs[6] + COLS[6].w - 5, ty, num2(l.price), { size: 8.8, color: INK, align: 'right' });
+    pdf.text(xs[7] + COLS[7].w - 5, ty, num2((Number(l.qty) || 0) * (Number(l.price) || 0)), { size: 8.8, color: INK, align: 'right' });
+    y += h; pdf.line(M, y, R, y, { color: LINE, w: 0.5 });
+  });
+  const taxable = orderTaxable(o); const g = orderGst({ ...o, currency: 'INR', gst: { pct, kind: local ? 'local' : 'igst' } }); const half = round2(g / 2);
+  const sums = [['Goods', orderSubtotal(o)]];
+  if (Number(o.shipping)) sums.push(['Shipping and insurance', Number(o.shipping)]);
+  if (Number(o.discount)) sums.push(['Discount', -Number(o.discount)]);
+  sums.push(['Taxable value', taxable]);
+  if (local) sums.push([`CGST ${pdfN(pct / 2)}%`, half], [`SGST ${pdfN(pct / 2)}%`, round2(g - half)]); else sums.push([`IGST ${pdfN(pct)}%`, g]);
+  room(sums.length * 15 + 70, false);
+  y += 18; const TX = R - 236;
+  for (const [k, v] of sums) { pdf.text(TX, y, k, { size: 9, color: MUTED }); pdf.text(R - 6, y, num2(v), { size: 9, color: INK, align: 'right' }); y += 15; }
+  pdf.line(TX, y - 5, R, y - 5, { color: GOLD, w: 0.7 }); y += 11;
+  pdf.text(TX, y, 'Total', { f: 'TB', size: 12.5, color: NAVY }); pdf.text(R - 6, y, `INR ${num2(round2(taxable + g))}`, { f: 'TB', size: 12.5, color: NAVY, align: 'right' }); y += 22;
+  for (const ln of pdfWrap(`Amount in words: ${amountWords(round2(taxable + g), 'INR')}`, 'R', 8.8, CW)) { room(14, false); pdf.text(M, y, ln, { size: 8.8, color: INK }); y += 12; }
+  for (const ln of pdfWrap(`Tax in words: ${amountWords(g, 'INR')}`, 'R', 8.8, CW)) { room(14, false); pdf.text(M, y, ln, { size: 8.8, color: INK }); y += 12; }
+  y += 8;
+  const notes = ['All diamonds in these pieces are laboratory-grown diamonds.', 'The purity of hallmarked jewellery can be verified at any BIS-recognised Assaying and Hallmarking Centre.',
+    ...(Number(x.hm) > 0 ? [`Hallmarking charges: INR ${num2(x.hm)} a piece, included in the rates above.`] : []), ...(o.notes ? [o.notes] : [])];
+  for (const n of notes) { const lns = pdfWrap(n, 'R', 8.2, CW - 12); room(lns.length * 11 + 4, false); lns.forEach((ln, k) => { if (!k) pdf.text(M, y, '•', { size: 8.2, color: GOLD }); pdf.text(M + 10, y, ln, { size: 8.2, color: MUTED }); y += 11; }); y += 2; }
+  room(70, false); y += 18;
+  pdf.text(R, y, `For ${company}`, { f: 'B', size: 9, color: INK, align: 'right' }); y += 36;
+  pdf.line(R - 160, y, R, y, { color: INK, w: 0.5 }); y += 12;
+  pdf.text(R, y, co.senderName ? `${co.senderName}, authorised signatory` : 'Authorised signatory', { size: 8.2, color: MUTED, align: 'right' });
+  const n = pdf.pageCount; const foot = [company, co.address, t.gstin ? `GSTIN ${t.gstin}` : ''].filter(Boolean).join('  ·  ');
+  for (let i = 0; i < n; i++) { pdf.onPage(i); pdf.line(M, pdf.H - 46, R, pdf.H - 46, { color: LINE, w: 0.5 }); pdf.text(M, pdf.H - 33, pdfFit(foot, 'R', 7, CW - 70), { size: 7, color: MUTED }); pdf.text(R, pdf.H - 33, `Page ${i + 1} of ${n}`, { size: 7, color: MUTED, align: 'right' }); }
+  return pdf.bytes();
 }
 
 /* ================= export papers: the commercial invoice and packing list that travel with the parcel ================= */
@@ -3265,14 +3583,14 @@ async function tripMailSend(tid) {
 /* ================= prices: wholesale price calculator ================= */
 const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
 const roundUp = (x, step) => (step > 0 ? Math.ceil(x / step - 1e-9) * step : Math.ceil(x * 100 - 1e-9) / 100);
-function fxFmt(cur, v) { const s = Number(v).toLocaleString('en-GB', { maximumFractionDigits: 2 }); const sym = (FX.find(([c]) => c === cur) || [])[1]; return sym ? sym + s : `${cur} ${s}`; }
+function fxFmt(cur, v) { if (cur === 'INR') return '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }); const s = Number(v).toLocaleString('en-GB', { maximumFractionDigits: 2 }); const sym = (FX.find(([c]) => c === cur) || [])[1]; return sym ? sym + s : `${cur} ${s}`; }
 function pcInputs() {
   const pr = settings().pricing; const g = (k, d = '') => (k in S.pc ? S.pc[k] : d);
   return { code: g('code'), metal: g('metal', 'silver925'), weight: g('weight'), wastage: g('wastage', pr.wastage), makingPerG: g('makingPerG'), setting: g('setting'), ct1: g('ct1'), rate1: g('rate1'), ct2: g('ct2'), rate2: g('rate2'), plating: g('plating'), cert: g('cert'), other: g('other'), margin: g('margin', pr.margin), shipping: g('shipping'), fixed: g('fixed'), fixedCur: g('fixedCur', 'INR'), buyer: g('buyer'), cur: g('cur') };
 }
 function pcRates() {
   const pr = settings().pricing; const g = (k, d) => (k in S.rt ? S.rt[k] : d);
-  return { gold24: g('gold24', pr.gold24), silver: g('silver', pr.silver), round: g('round', pr.round), retailMarkup: g('retailMarkup', pr.retailMarkup), retailVat: g('retailVat', pr.retailVat), rates: Object.fromEntries(FX.map(([c]) => [c, g(c, pr.rates[c])])) };
+  return { gold24: g('gold24', pr.gold24), silver: g('silver', pr.silver), round: g('round', pr.round), roundINR: g('roundINR', pr.roundINR), retailMarkup: g('retailMarkup', pr.retailMarkup), retailVat: g('retailVat', pr.retailVat), rates: Object.fromEntries(FX.map(([c]) => [c, g(c, pr.rates[c])])) };
 }
 function calcPrice(p, r) {
   const n = (v) => Math.max(0, Number(v) || 0);
@@ -3291,6 +3609,7 @@ function calcPrice(p, r) {
   const fixed = n(p.fixed); const fc = FX.some(([c]) => c === p.fixedCur) ? p.fixedCur : 'INR';
   const price = fixed ? (fc === 'INR' ? fixed : n(r.rates[fc]) ? fixed * n(r.rates[fc]) : 0) : worked;
   const fx = {}; for (const [c] of FX) { if (fixed && c === fc) { fx[c] = fixed; continue; } const rate = n(r.rates[c]); if (rate && price) fx[c] = roundUp(price / rate, n(r.round)); }
+  if (price) fx.INR = fixed && fc === 'INR' ? fixed : roundUp(price, r.roundINR === '' || r.roundINR == null ? 10 : n(r.roundINR));
   return { fine, metal, wastage, making, setting, diamonds, extras, cost, margin, shipping: n(p.shipping), price, worked, fixed: fixed ? { amount: fixed, cur: fc } : null, fx, missingMetal: !fixed && n(p.weight) > 0 && !fine };
 }
 // What a UK shop would ask for a piece: your price in pounds × its usual mark-up, plus VAT, to the nearest £5.
@@ -3518,7 +3837,44 @@ function todayData() {
   const bcs = [...S.broadcasts.values()].map((bc) => ({ bc, left: bcStats(bc).left })).filter((x) => x.left).sort((a, b) => String(b.bc.createdAt).localeCompare(String(a.bc.createdAt)));
   const mine = new Set((f.country ? [f.country] : bs.map((b) => b.country)).filter(Boolean));
   const pitch = SEASONS.filter((x) => seasonPhase(x) === 'now' && (!mine.size || x.countries.some((c) => mine.has(c))));
-  return { emails, tasks, waiting, reminders, meetings, samples, retry, bcs, pitch, orders: orderTodos(), hot: hotShops(), requests: newRequests(), brake, held };
+  return { emails, tasks, waiting, reminders, meetings, samples, retry, bcs, pitch, orders: orderTodos(), hot: hotShops(), requests: newRequests(), brake, held, answers: shopAnswers(), drift: driftList(), salesDue: salesDue() };
+}
+// What shops did on their own pages that you haven't seen yet: a quote accepted, a CAD drawing answered, what sold.
+function shopAnswers() {
+  const out = [];
+  for (const q of S.quotes.values()) if (q.status === 'accepted' && q.acceptedVia === 'link' && !q.isExample && !q.acceptSeenAt && ![...S.orders.values()].some((o) => o.quoteId === q.id) && S.businesses.get(q.businessId)) out.push({ kind: 'accepted', at: q.acceptedAt || q.decidedAt, q, b: S.businesses.get(q.businessId) });
+  for (const o of S.orders.values()) {
+    const b = S.businesses.get(o.businessId); if (!b || o.isExample) continue;
+    for (const c of o.cad || []) if (c.answer && c.answer.by === 'shop' && !c.answer.seenAt) out.push({ kind: 'cad', at: c.answer.at, o, c, b });
+    if (o.sold && o.sold.by === 'shop' && !o.sold.seenAt) out.push({ kind: 'sold', at: o.sold.at, o, b });
+  }
+  return out.sort((a, c) => String(c.at).localeCompare(String(a.at)));
+}
+function answerItem(x) {
+  const { b } = x; const when = x.at ? `, ${fmtWhen(x.at)}` : ''; let text = ''; let acts = ''; let quote = '';
+  if (x.kind === 'accepted') {
+    text = `Accepted quote ${x.q.number} on their page${when}. Make the proforma for the advance.`; quote = x.q.acceptNote || '';
+    acts = `<button type="button" class="btn small primary" data-act="order-from-quote" data-id="${esc(x.q.id)}">${ico('receipt')}Make the proforma</button><button type="button" class="btn small quiet" data-act="accepted-seen" data-id="${esc(x.q.id)}">Done</button>`;
+  } else if (x.kind === 'cad') {
+    const ok = x.c.answer.decision === 'ok'; text = ok ? `Approved the CAD drawing for ${x.o.number}${when}. Production can start.` : `Asked for a change to the CAD drawing for ${x.o.number}${when}:`; quote = ok ? '' : x.c.answer.comment;
+    acts = `<button type="button" class="btn small primary" data-act="order-open" data-id="${esc(x.o.id)}">Open the order</button><button type="button" class="btn small quiet" data-act="cad-seen" data-id="${esc(x.o.id)}" data-val="${esc(x.c.id)}">Seen</button>`;
+  } else {
+    const s = x.o.sold.lines.reduce((a, n) => a + (Number(n) || 0), 0); const n = (x.o.lines || []).reduce((a, l) => a + (Number(l.qty) || 0), 0);
+    text = `Told you what sold from ${x.o.number}${when}: ${s} of ${n} pieces.`;
+    acts = `<button type="button" class="btn small primary" data-act="msg" data-id="${esc(b.id)}" data-mode="reorder">${ico('share')}Suggest a reorder</button><button type="button" class="btn small quiet" data-act="sold-seen" data-id="${esc(x.o.id)}">Seen</button>`;
+  }
+  return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button>${exChip(b)}</div><div class="meta"><span>${esc([b.city, b.country].filter(Boolean).join(', '))}</span></div><div class="subj">${esc(text)}</div>${quote ? `<div class="msg quote">${esc(trunc(quote, 260))}</div>` : ''}</div><div class="actions">${acts}</div></div>`;
+}
+// Delivered orders a month or more ago that nobody has asked about yet.
+function salesDue() {
+  const days = Number(settings().rules.salesCheckDays) || 30; const today = todayStr();
+  return [...S.orders.values()].filter((o) => o.status === 'delivered' && !o.isExample && !o.sold && !o.salesAskAt && o.deliveredAt && daysBetween(o.deliveredAt, today) >= days && S.businesses.get(o.businessId)).sort((a, c) => String(a.deliveredAt).localeCompare(String(c.deliveredAt)));
+}
+function salesDueItem(o) {
+  const b = S.businesses.get(o.businessId);
+  return `<div class="item"><div class="stack"><div class="title-row"><button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(b.name)}</button></div><div class="meta"><span>Order ${esc(o.number)}</span><span>Delivered ${esc(fmtDay(o.deliveredAt))}</span></div>
+    <div class="subj">Ask how the pieces are selling. They can answer on their page in a minute, and you'll know what to suggest for the next order.</div></div>
+    <div class="actions"><button type="button" class="btn small primary" data-act="msg" data-id="${esc(b.id)}" data-mode="sales" data-ref="${esc(o.id)}">${ico('share')}Ask them</button><button type="button" class="btn small quiet" data-act="sold-note" data-id="${esc(o.id)}">Note what sold</button></div></div>`;
 }
 function helloCard(t) {
   const now = new Date(); const hr = now.getHours(); const f = focusNow();
@@ -3548,7 +3904,9 @@ function helloCard(t) {
     ${row('chat', 'Replies waiting', w ? `<span class="hot">${w}</span>` : '0', w ? 'sec-replies' : '')}
     ${row('mail', 'To send today', send ? `${t.emails.length} ${t.emails.length === 1 ? 'email' : 'emails'}, ${t.tasks.length} ${t.tasks.length === 1 ? 'task' : 'tasks'}` : 'nothing', t.emails.length ? 'sec-emails' : t.tasks.length ? 'sec-tasks' : '')}
     ${t.requests.length ? row('doc', 'Quote requests', `<span class="hot">${t.requests.length}</span>`, 'sec-requests') : ''}
+    ${t.answers.length ? row('check', "Shops' answers", `<span class="hot">${t.answers.length}</span>`, 'sec-answers') : ''}
     ${t.hot.length ? row('spark', 'Opened your catalogue', `<span class="hot">${t.hot.length}</span>`, 'sec-hot') : ''}
+    ${t.drift.length ? row('trend', 'Gold has moved', `${t.drift.length} ${t.drift.length === 1 ? 'quote' : 'quotes'} to check`, 'sec-drift') : ''}
     ${row('meet', 'Meetings today', String(mt), mt ? 'sec-meetings' : '#meetings')}
     ${row('clock', 'Reminders', rm ? `${rm} due${late ? `, <span class="hot">${late} overdue</span>` : ''}` : 'none due', rm ? 'sec-reminders' : '')}
     ${row('receipt', 'Orders', o ? `${o} need${o === 1 ? 's' : ''} you` : 'nothing due', '#orders')}
@@ -3589,7 +3947,7 @@ function todayView() {
   const retrySpan = Math.max(0, ...stepsFor('retry').map((x) => Number(x.day) || 0));
   const pitchNames = [...new Set(t.pitch.map((x) => x.name))];
   const visitsToday = tripsList().some((tr) => (tr.stops || []).some((st) => tripDay(tr.startDate, st.day) === todayStr()));
-  const quiet = !gmailOn() && !visitsToday && ![t.waiting, t.tasks, t.emails, t.orders, t.bcs, t.samples, t.reminders, t.meetings, t.retry, t.hot, t.requests].some((x) => x.length);
+  const quiet = !gmailOn() && !visitsToday && ![t.waiting, t.tasks, t.emails, t.orders, t.bcs, t.samples, t.reminders, t.meetings, t.retry, t.hot, t.requests, t.answers, t.drift, t.salesDue].some((x) => x.length);
   return `
   ${helloCard(t)}
   ${researchBanner()}
@@ -3602,10 +3960,13 @@ function todayView() {
     ${t.waiting.length ? `<div class="list">${t.waiting.map(waitingItem).join('')}</div>` : emptyBox(gmailOn() ? 'No replies waiting. Replies from Gmail land here by themselves, and the app reminds you until you answer.' : 'No replies waiting. When a buyer answers, log it with <b>Log a reply</b> and the app reminds you until you respond.')}
   </section>` : ''}
   ${requestsSection('sec-requests')}
+  ${t.answers.length ? `<section class="section" id="sec-answers"><h2>From your shops' pages <span class="count">${t.answers.length}</span></h2><div class="list">${t.answers.map(answerItem).join('')}</div></section>` : ''}
+  ${t.drift.length ? `<section class="section" id="sec-drift"><h2>Gold has moved <span class="count">${t.drift.length}</span></h2><p class="hint">These were quoted at older gold and exchange rates; today's would cost the shop ${driftLimit()}% or more extra. Re-quote, or keep the price.</p><div class="list">${t.drift.map(driftItem).join('')}</div></section>` : ''}
   ${t.hot.length ? `<section class="section" id="sec-hot"><h2>Interested shops <span class="count">${t.hot.length}</span></h2><p class="hint">They opened your catalogue or prices this week. The keenest come first: price-list opens, designs looked at and the sample kit count most. Follow up while you're on their mind.</p><div class="list">${t.hot.map(hotItem).join('')}</div></section>` : ''}
   ${t.meetings.length ? `<section class="section" id="sec-meetings"><h2>Meetings today <span class="count">${t.meetings.length}</span></h2><div class="list">${t.meetings.map(meetingItem).join('')}</div></section>` : ''}
   ${t.reminders.length ? `<section class="section" id="sec-reminders"><h2>Reminders <span class="count">${t.reminders.length}</span></h2><div class="list">${t.reminders.map(reminderItem).join('')}</div></section>` : ''}
   ${t.orders.length ? `<section class="section"><h2>Orders <span class="count">${t.orders.length}</span></h2><div class="list">${t.orders.map(({ o, t: td }) => orderItem(o, td)).join('')}</div></section>` : ''}
+  ${t.salesDue.length ? `<section class="section" id="sec-sales"><h2>Ask what sold <span class="count">${t.salesDue.length}</span></h2><div class="list">${t.salesDue.map(salesDueItem).join('')}</div></section>` : ''}
   ${t.tasks.length ? `<section class="section" id="sec-tasks"><h2>Your tasks <span class="count">${t.tasks.length}</span></h2>
     <div class="list">${t.tasks.map(taskItem).join('')}</div>
   </section>` : ''}
@@ -4175,6 +4536,8 @@ function sequenceView() {
       ${rule('reorderDays', 'Reorder check-in after an order, in days', 7)}
       ${rule('retryAfterDays', 'Second try for buyers who never answered, in days', 30)}
       ${rule('sampleCheckDays', 'Check in after sending samples, in days', 1)}
+      ${rule('salesCheckDays', 'Ask a shop what sold, days after delivery', 7)}
+      ${rule('goldMovePct', 'Warn when gold or a currency moves an open quote by, %', 1)}
     </div><div class="actions"><button class="btn primary" data-act="rules-save">${ico('check')}Save rules</button></div></div>
   </section>
   <section class="section"><div class="sec-head"><h2>Ready answers <span class="count">${st.answers.length}</span></h2><button class="btn small" data-act="ans-add">${ico('plus')}Add an answer</button></div>
@@ -4401,7 +4764,9 @@ function ordersPanel(b) {
 function orderDrawer(o) {
   const b = S.businesses.get(o.businessId); const by = o.buyer || {}; const cur = o.currency;
   const total = orderTotal(o), paid = orderPaid(o), adv = orderAdvance(o), due = round2(Math.max(0, total - paid));
-  const uk = (by.country || (b && b.country) || '') === UK; const panel = S.ui.orderPanel; const off = o.status === 'cancelled';
+  const drift = o.status === 'pi' && !(adv > 0 && paid + 0.005 >= adv) ? (() => { const x = driftOf(o); return x && x.pct >= driftLimit() ? x : null; })() : null;
+  const uk = (by.country || (b && b.country) || '') === UK; const india = inIndia(by.country || (b && b.country) || ''); const panel = S.ui.orderPanel; const off = o.status === 'cancelled';
+  const papers = (x = {}) => (india ? btn('order-panel', 'Tax invoice', { val: 'tax', icon: 'receipt', ...x }) : btn('order-panel', 'Export papers', { val: 'export', icon: 'receipt', ...x }));
   const idx = ORDER_TRACK.findIndex(([k]) => k === o.status);
   const track = `<ol class="track${off ? ' off' : ''}" aria-label="Order progress">${ORDER_TRACK.map(([, label], i) => { const cls = off ? '' : o.status === 'delivered' || i < idx ? 'done' : i === idx ? 'now' : ''; return `<li class="${cls}"${i === idx && !off ? ' aria-current="step"' : ''}>${esc(label)}</li>`; }).join('')}</ol>`;
   const btn = (act, label, x = {}) => `<button type="button" class="btn small ${x.primary ? 'primary' : x.quiet ? 'quiet' : ''}" data-act="${act}" data-id="${esc(o.id)}"${x.val != null ? ` data-val="${esc(x.val)}"` : ''}>${x.icon ? ico(x.icon) : ''}${label}</button>`;
@@ -4411,15 +4776,15 @@ function orderDrawer(o) {
     acts = [btn('order-panel', 'Email proforma', { primary: !o.emailedAt, val: 'mail', icon: 'mail' }), btn('order-panel', 'Record payment', { primary: !!o.emailedAt, val: 'pay', icon: 'check' }), btn('order-pdf', 'PDF', { icon: 'download' }), btn('order-status', 'Start production', { quiet: true, val: 'production' })];
   } else if (o.status === 'production') {
     lead = `In production${o.readyBy ? `, ready by ${esc(fmtDay(o.readyBy))}` : ''}.${paid ? ` ${esc(fmtMoney(paid, cur))} received.` : ''}`;
-    acts = [btn('order-status', 'Ready: ask for the balance', { primary: true, val: 'ready', icon: 'check' }), btn('order-panel', 'Record payment', { val: 'pay' }), btn('order-panel', 'Export papers', { val: 'export', icon: 'receipt' }), btn('order-pdf', 'PDF', { icon: 'download' })];
+    acts = [btn('order-status', 'Ready: ask for the balance', { primary: true, val: 'ready', icon: 'check' }), btn('order-panel', 'Record payment', { val: 'pay' }), papers(), btn('order-pdf', 'PDF', { icon: 'download' })];
   } else if (o.status === 'ready') {
     lead = due > 0 ? `Ready. Balance of <b>${esc(fmtMoney(due, cur))}</b> due${o.balanceDueAt ? ` by ${esc(fmtDay(o.balanceDueAt))}` : ''}, before dispatch.` : 'Paid in full. Ready to ship.';
-    acts = [...(due > 0 ? [btn('order-panel', 'Record payment', { primary: true, val: 'pay', icon: 'check' }), btn('order-panel', 'Mark shipped', { val: 'ship', icon: 'box' })] : [btn('order-panel', 'Mark shipped', { primary: true, val: 'ship', icon: 'box' })]), btn('order-panel', 'Export papers', { val: 'export', icon: 'receipt' })];
+    acts = [...(due > 0 ? [btn('order-panel', 'Record payment', { primary: true, val: 'pay', icon: 'check' }), btn('order-panel', 'Mark shipped', { val: 'ship', icon: 'box' })] : [btn('order-panel', 'Mark shipped', { primary: true, val: 'ship', icon: 'box' })]), papers()];
   } else if (o.status === 'shipped') {
     const sh = o.ship || {}; const url = trackUrl(sh);
     lead = `Shipped ${esc(fmtDay(o.shippedAt))}${sh.courier ? ` by ${esc(COURIER_LABEL[sh.courier] || sh.courier)}` : ''}${sh.tracking ? `, tracking <span class="mono sel">${esc(sh.tracking)}</span>` : ''}.${url ? ` <a href="${esc(url)}" target="_blank" rel="noopener">Track it</a>` : ''}`;
-    acts = [btn('order-status', 'Mark delivered', { primary: true, val: 'delivered', icon: 'check' }), btn('order-panel', 'Export papers', { val: 'export', icon: 'receipt' })];
-  } else if (o.status === 'delivered') { lead = `Delivered ${esc(fmtDay(o.deliveredAt))}.${b && b.lead && b.lead.followUpAt ? ` Reorder check-in on ${esc(fmtDay(b.lead.followUpAt))}.` : ''}`; acts = [btn('order-panel', 'Export papers', { val: 'export', icon: 'receipt' })]; }
+    acts = [btn('order-status', 'Mark delivered', { primary: true, val: 'delivered', icon: 'check' }), papers()];
+  } else if (o.status === 'delivered') { lead = `Delivered ${esc(fmtDay(o.deliveredAt))}.${b && b.lead && b.lead.followUpAt ? ` Reorder check-in on ${esc(fmtDay(b.lead.followUpAt))}.` : ''}`; acts = [papers()]; }
   else lead = 'This order was cancelled.';
   const cancel = btn('order-panel', 'Cancel', { quiet: true, val: '' });
   const payForm = panel === 'pay' ? `<section class="panel"><h3>Record a payment</h3><div class="grid3">
@@ -4434,7 +4799,7 @@ function orderDrawer(o) {
       <div class="field"><label for="ship-at">Shipped on</label><input class="input" type="date" id="ship-at" data-k="ship.at" value="${esc(fv('ship.at', todayStr()))}"></div></div>
       ${uk && !(o.checks || {}).hallmark ? `<div class="warnline">${ico('alert')}Hallmarking isn't ticked. In the UK, gold over 1 g and silver over 7.78 g need a UK hallmark before they're sold.</div>` : ''}
       ${due > 0 ? `<div class="warnline">${ico('alert')}${esc(fmtMoney(due, cur))} is still unpaid.</div>` : ''}
-      ${o.export ? '' : `<div class="warnline">${ico('alert')}The commercial invoice and packing list aren't made yet. <button type="button" class="linkish" data-act="order-panel" data-id="${esc(o.id)}" data-val="export">Make them now</button></div>`}
+      ${india ? (o.tax ? '' : `<div class="warnline">${ico('alert')}The tax invoice isn't made yet. <button type="button" class="linkish" data-act="order-panel" data-id="${esc(o.id)}" data-val="tax">Make it now</button></div>`) : o.export ? '' : `<div class="warnline">${ico('alert')}The commercial invoice and packing list aren't made yet. <button type="button" class="linkish" data-act="order-panel" data-id="${esc(o.id)}" data-val="export">Make them now</button></div>`}
       <div class="actions"><button type="button" class="btn primary" data-act="ship-save" data-id="${esc(o.id)}">${ico('box')}Mark shipped</button>${cancel}</div></section>` : '';
   const m = piMail(o); const tr = settings().trade; const noBank = !(tr.accountNo && (tr.swift || tr.ifsc)); const busy = S.gm.busy === 'pi:' + o.id;
   const mailForm = panel === 'mail' ? `<section class="panel"><h3>Email the proforma</h3>
@@ -4451,21 +4816,30 @@ function orderDrawer(o) {
   const payments = `<section class="panel"><h3>Payments</h3>${pays.length ? pays.map((p) => `<div class="srow"><div class="stack"><div class="title-row"><b>${esc(fmtMoney(p.amount, cur))}</b><span class="sub">${esc(fmtDate(p.at))}</span></div><div class="meta"><span>${esc(PAY_LABEL[p.method] || p.method || 'Payment')}</span>${p.ref ? `<span class="mono sel">${esc(p.ref)}</span>` : ''}</div></div><div class="actions">${confirmBtn(`pay:${o.id}:${p.id}`, 'Remove', 'Tap again to remove', 'pay-delete', `data-id="${esc(o.id)}" data-val="${esc(p.id)}"`)}</div></div>`).join('') : '<p class="hint">No payments yet. Record each transfer when it reaches your bank.</p>'}</section>`;
   const checks = o.checks || {};
   const AUTO = { '@pi': ['Proforma sent', !!o.emailedAt || o.status !== 'pi'], '@advance': ['Advance received', adv > 0 ? paid + 0.005 >= adv : paid > 0], '@balance': ['Balance received', total > 0 && paid + 0.005 >= total], '@delivered': ['Delivered', o.status === 'delivered'] };
-  const FLOW = ['@pi', '@advance', 'cad', 'photos', 'certs', 'hallmark', '@balance', 'invoice', 'origin', 'export', 'insured', '@delivered'];
+  AUTO['@tax'] = ['Tax invoice made', !!o.tax];
+  if ((o.cad || []).length && o.cad.every((c) => c.answer && c.answer.decision === 'ok')) AUTO.cad = ['CAD approved by the buyer', true];
+  if ((o.finished || []).length) AUTO.photos = ['Photos of the finished pieces on their page', true];
+  const FLOW = india ? ['@pi', '@advance', 'cad', 'photos', 'certs', '@balance', '@tax', 'insured', '@delivered'] : ['@pi', '@advance', 'cad', 'photos', 'certs', 'hallmark', '@balance', 'invoice', 'origin', 'export', 'insured', '@delivered'];
   const checklist = `<section class="panel"><h3>${uk ? 'UK order checklist' : 'Order checklist'}</h3><div class="checklist">${FLOW.map((k) => {
     if (AUTO[k]) { const [label, on] = AUTO[k]; return `<div class="auto ${on ? 'on' : ''}">${ico(on ? 'check' : 'clock')}<span>${esc(label)}</span></div>`; }
     const c = ORDER_CHECKS.find((x) => x.k === k); if (!c || (c.uk && !uk)) return '';
     return `<label class="switch"><input type="checkbox" id="chk-${esc(o.id)}-${k}" data-check="${esc(o.id)}:${k}" ${checks[k] ? 'checked' : ''} ${off ? 'disabled' : ''}>${esc(c.label)}</label>`;
   }).join('')}</div></section>`;
-  const items = `<section class="panel"><h3>Items</h3><dl class="ledger">${(o.lines || []).map((l) => `<dt>${esc(l.desc || 'Item')}<span class="sub"> · ${esc(l.qty)} × ${esc(num2(l.price))}${l.hs ? ` · HS ${esc(l.hs)}` : ''}</span></dt><dd>${esc(num2((Number(l.qty) || 0) * (Number(l.price) || 0)))}</dd>`).join('')}${Number(o.shipping) ? `<dt>Shipping and insurance</dt><dd>${esc(num2(o.shipping))}</dd>` : ''}${Number(o.discount) ? `<dt>Discount</dt><dd>−${esc(num2(o.discount))}</dd>` : ''}<dt class="tot">Total</dt><dd class="tot">${esc(fmtMoney(total, cur))}</dd></dl></section>`;
-  const rows = [['Buyer', b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(by.name || b.name)}</button>` : esc(by.name || '')], ['Email', by.email && `<span class="mono sel">${esc(by.email)}</span>`], ['Address', by.address && esc(by.address)], ['VAT', by.vat && esc(by.vat)],
+  const items = `<section class="panel"><h3>Items</h3><dl class="ledger">${(o.lines || []).map((l) => `<dt>${esc(l.desc || 'Item')}<span class="sub"> · ${esc(l.qty)} × ${esc(num2(l.price))}${l.hs ? ` · HS ${esc(l.hs)}` : ''}</span></dt><dd>${esc(num2((Number(l.qty) || 0) * (Number(l.price) || 0)))}</dd>`).join('')}${Number(o.shipping) ? `<dt>Shipping and insurance</dt><dd>${esc(num2(o.shipping))}</dd>` : ''}${Number(o.discount) ? `<dt>Discount</dt><dd>−${esc(num2(o.discount))}</dd>` : ''}${gstOn(o) ? `<dt>${esc(gstLabel(o.gst))}</dt><dd>${esc(num2(orderGst(o)))}</dd>` : ''}<dt class="tot">Total</dt><dd class="tot">${esc(fmtMoney(total, cur))}</dd></dl></section>`;
+  const rows = [['Buyer', b ? `<button class="linkish" data-act="open-biz" data-id="${esc(b.id)}">${esc(by.name || b.name)}</button>` : esc(by.name || '')], ['Email', by.email && `<span class="mono sel">${esc(by.email)}</span>`], ['Address', by.address && esc(by.address)], ['VAT', !india && by.vat && esc(by.vat)], ['GSTIN', india && by.gstin && `<span class="mono sel">${esc(by.gstin)}</span>`], ['Tax invoice', o.tax && esc(`${o.tax.number}, ${fmtDate(o.tax.date)}`)],
     ['Terms', esc(`${o.incoterm || ''} ${o.place || ''}`.trim())], ['Ships from', o.port && esc(o.port)], ['Proforma date', esc(fmtDate(o.piDate))], ['Valid until', o.validUntil && esc(fmtDate(o.validUntil))], ['Advance due', o.advanceDueAt && esc(fmtDate(o.advanceDueAt))], ['Ready by', o.readyBy && esc(fmtDate(o.readyBy))], ['Balance due', o.balanceDueAt && esc(fmtDate(o.balanceDueAt))], ['Commercial invoice', o.export && esc(`${o.export.number}, ${fmtDate(o.export.date)}`)]].filter((r) => r[1]);
   return `<div class="drawer" role="dialog" aria-modal="true" aria-label="Proforma ${esc(o.number)}">
     <div class="layer-head"><div><div class="eyebrow">Proforma invoice · ${esc(by.name || (b && b.name) || '')}</div><h2>${esc(o.number)}</h2><div class="chips"><span class="chip ${ORDER_TONE[o.status] || ''}">${esc(ORDER_LABEL[o.status] || o.status)}</span>${o.emailedAt ? `<span class="chip">${ico('mail')}Emailed ${esc(fmtDay(String(o.emailedAt).slice(0, 10)))}</span>` : ''}</div></div>${closeBtn()}</div>
     ${track}
     <div class="tiles wide">${tile(esc(fmtShort(total, cur)), 'Total')}${tile(esc(fmtShort(adv, cur)), `Advance, ${esc(pdfN(orderPct(o)))}%`)}${tile(esc(fmtShort(paid, cur)), 'Received')}${tile(esc(fmtShort(due, cur)), 'Still due')}</div>
     <section class="panel"><h3>Next</h3><p style="margin:0">${lead}</p>${acts.length ? `<div class="actions">${acts.join('')}</div>` : ''}</section>
-    ${payForm}${shipForm}${mailForm}${panel === 'export' && !off ? exportPanel(o) : ''}${payments}${checklist}${items}
+    ${drift ? `<div class="warnline">${ico('trend')}At today's gold and exchange rates this would come to ${esc(fmtMoney(drift.now, cur))} before shipping, ${esc(pctShort(drift.pct))}% more than on the proforma. <button type="button" class="linkish" data-act="reprice" data-id="${esc(o.id)}">Update to today's prices</button></div>` : ''}
+    ${payForm}${shipForm}${mailForm}${panel === 'export' && !off ? exportPanel(o) : ''}${panel === 'tax' && !off ? taxPanel(o) : ''}
+    ${!off && b ? `<section class="panel"><h3>Their order page</h3><p class="hint" style="margin:0">Where ${esc(b.name)} follows this order${(o.cad || []).length ? ', approves the drawings' : ''} and sees the photos.${o.pageSentAt ? ` You sent it on ${esc(fmtDay(String(o.pageSentAt).slice(0, 10)))}.` : ''}</p><div class="actions"><button type="button" class="btn small" data-act="msg" data-id="${esc(b.id)}" data-mode="order" data-ref="${esc(o.id)}">${ico('share')}Send it</button><button type="button" class="btn small quiet" data-act="page-copy" data-id="${esc(b.id)}">${ico('copy')}Copy link</button></div></section>` : ''}
+    ${!off && (['pi', 'production'].includes(o.status) || (o.cad || []).length) ? cadPanel(o) : ''}
+    ${!off && ['production', 'ready', 'shipped', 'delivered'].includes(o.status) ? finishedPanel(o) : ''}
+    ${o.status === 'delivered' ? salesPanel(o) : ''}
+    ${payments}${checklist}${items}
     <section class="panel"><h3>Details</h3><dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
     <div class="actions">${off ? '' : btn('order-edit', 'Edit proforma')}${btn('order-pdf', 'Download PDF', { icon: 'download' })}${!off && o.status !== 'delivered' ? confirmBtn('ocancel:' + o.id, 'Cancel order', 'Tap again to cancel the order', 'order-cancel', `data-id="${esc(o.id)}"`) : ''}${(o.payments || []).length ? '' : confirmBtn('odel:' + o.id, 'Delete', 'Tap again to delete', 'order-delete', `data-id="${esc(o.id)}"`)}</div>
   </div>`;
@@ -4478,7 +4852,8 @@ function orderModal() {
   return `<form class="modal wide" role="dialog" aria-modal="true" aria-labelledby="o-title" data-form="order">
     <div class="layer-head"><div><div class="eyebrow">${b ? `${esc(b.name)} · ${esc([b.city, b.country].filter(Boolean).join(', '))}` : 'Proforma invoice'}</div><h2 id="o-title">${d.number ? `Edit ${esc(d.number)}` : 'New proforma invoice'}</h2></div>${closeBtn()}</div>
     ${d.id ? '' : `<div class="field"><label for="o-businessId">Buyer</label>${selectHtml('o-businessId', 'data-o="businessId"', buyers.map((x) => [x.id, `${x.name}${x.city ? ', ' + x.city : ''}`]), d.businessId, 'Choose a buyer')}</div>`}
-    <section class="panel"><h3>Bill to</h3><div class="grid2">${bf('name', 'Company name')}${bf('person', 'Contact person')}${bf('email', 'Email', 'email')}${bf('phone', 'Phone', 'tel')}${bf('country', 'Country')}${bf('vat', ob.country === UK ? 'UK VAT number' : 'VAT or tax number')}</div>
+    <section class="panel"><h3>Bill to</h3><div class="grid2">${bf('name', 'Company name')}${bf('person', 'Contact person')}${bf('email', 'Email', 'email')}${bf('phone', 'Phone', 'tel')}${bf('country', 'Country')}${inIndia(ob.country) ? `${bf('gstin', 'GSTIN')}<div class="field"><label for="ob-state">State</label>${selectHtml('ob-state', 'data-ob="state"', IN_STATES.map(([c, n]) => [c, n]), ob.state || buyerStateOf({ gstin: ob.gstin }, b), 'Choose')}</div>` : bf('vat', ob.country === UK ? 'UK VAT number' : 'VAT or tax number')}</div>
+      ${inIndia(ob.country) && ob.gstin && !gstinOk(ob.gstin) ? `<div class="warnline">${ico('alert')}That GSTIN doesn't look right: check it against their certificate.</div>` : ''}
       <div class="field"><label for="ob-address">Address</label><textarea class="input" id="ob-address" data-ob="address" style="min-height:64px">${esc(ob.address || '')}</textarea></div></section>
     <div class="grid3">
       <div class="field"><label for="o-currency">Currency</label>${selectHtml('o-currency', 'data-o="currency"', CURRENCIES.map((x) => [x, x]), d.currency)}</div>
@@ -4495,7 +4870,7 @@ function orderModal() {
         <button type="button" class="btn small quiet" data-act="ol-remove" data-val="${i}" aria-label="Remove item ${i + 1}" ${d.lines.length < 2 ? 'disabled' : ''}>${ico('x')}</button></div>`).join('')}
       <div><button type="button" class="btn small" data-act="ol-add">${ico('plus')}Add an item</button></div>
     </div>
-    <div class="grid3 nums">${of('shipping', 'Shipping and insurance', 'number', 'min="0" step="0.01"')}${of('discount', 'Discount', 'number', 'min="0" step="0.01"')}<div class="field"><span class="lab">Total</span><b class="qtotal">${esc(fmtMoney(orderTotal(d), d.currency))}</b></div></div>
+    <div class="grid3 nums">${of('shipping', 'Shipping and insurance', 'number', 'min="0" step="0.01"')}${of('discount', 'Discount', 'number', 'min="0" step="0.01"')}<div class="field"><span class="lab">Total</span><b class="qtotal">${esc(fmtMoney(orderTotal({ ...d, gst: draftGst(d) }), d.currency))}</b>${draftGst(d) ? `<span class="hint">With ${esc(gstLabel(draftGst(d)))}: ${esc(fmtMoney(orderGst({ ...d, gst: draftGst(d) }), d.currency))}</span>` : inIndia(ob.country) && d.currency !== 'INR' ? '<span class="hint">For a shop in India, choose INR: GST is added.</span>' : ''}</div></div>
     <div class="grid3 nums">${of('advancePct', 'Advance, %', 'number', 'min="0" max="100" step="1"')}${of('piDate', 'Invoice date', 'date')}${of('validUntil', 'Valid until', 'date')}${of('advanceDueAt', 'Advance due by', 'date')}${of('readyBy', 'Ready by', 'date')}${of('balanceDueAt', 'Balance due by', 'date')}</div>
     <div class="grid3">${of('port', 'Ships from')}${d.currency !== 'USD' ? of('usdRate', `1 ${esc(d.currency)} in US$, for reports`, 'number', 'min="0" step="0.0001"') : ''}</div>
     <div class="field"><label for="o-terms">Payment terms</label><textarea class="input" id="o-terms" data-o="terms" style="min-height:60px">${esc(d.terms || '')}</textarea></div>
@@ -4790,6 +5165,184 @@ async function addPhotos(designId, files) {
   S.ui.photoBusy = designId; render();
   try { const n = await savePhotos(designId, take); if (n) toast(`${n} ${n === 1 ? 'photo' : 'photos'} added`); } finally { S.ui.photoBusy = ''; render(); }
 }
+/* ---------- an order's drawings and photos, for the shop's page ---------- */
+async function addOrderFiles(oid, kind, files) {
+  const o = S.orders.get(oid); if (!o || !photosOn()) return;
+  S.ui.orderBusy = `${oid}:${kind}`; render();
+  const added = []; const at = nowIso(); const note = kind === 'cad' ? String(fv('cad.note', '')).trim().slice(0, 500) : '';
+  try {
+    for (const f of files.slice(0, kind === 'cad' ? 6 : 12)) {
+      if (kind === 'cad' && (/pdf$/i.test(f.type || '') || /\.pdf$/i.test(f.name || ''))) {
+        if (f.size > FILE_MAX_BYTES) { toast(`${f.name || 'That PDF'} is over 8 MB.`); continue; }
+        const name = String(f.name || 'drawing.pdf').slice(0, 80);
+        const m = await saveMedia({ kind: 'pdf', orderId: oid, mime: 'application/pdf', name }, f); if (!m) break;
+        added.push({ id: 'cad-' + newTrack().slice(0, 10), at, note, media: { id: m.id, name, size: m.size, parts: m.parts } }); continue;
+      }
+      if (!isImageFile(f)) { toast(`${f.name || 'A file'} isn't a photo${kind === 'cad' ? ' or a PDF' : ''}.`); continue; }
+      let pair; try { pair = await photoPair(f, kind === 'finished' && settings().photoClean); } catch { toast(`${f.name || 'A file'} isn't a photo the phone can read.`); continue; }
+      const pid = 'ph-' + newTrack().slice(0, 12), tid = 'th-' + newTrack().slice(0, 12);
+      if (!(await write(() => Data.set('photos', pid, { orderId: oid, kind: 'full', mime: 'image/jpeg', w: pair.full.w, h: pair.full.h, b64: pair.full.b64, createdAt: at })))) break;
+      if (!(await write(() => Data.set('photos', tid, { orderId: oid, kind: 'thumb', mime: 'image/jpeg', w: pair.thumb.w, h: pair.thumb.h, b64: pair.thumb.b64, createdAt: at })))) break;
+      S.photos.set(pid, 'data:image/jpeg;base64,' + pair.full.b64); S.photos.set(tid, 'data:image/jpeg;base64,' + pair.thumb.b64);
+      const ph = { id: pid, thumb: tid, w: pair.full.w, h: pair.full.h };
+      added.push(kind === 'cad' ? { id: 'cad-' + newTrack().slice(0, 10), at, note, photo: ph } : { ...ph, at });
+    }
+    if (!added.length) return;
+    const cur = S.orders.get(oid) || o;
+    if (await write(() => Data.update('orders', oid, { [kind]: [...(cur[kind] || []), ...added], updatedAt: nowIso() }))) {
+      clearForm('cad.');
+      toast(kind === 'cad' ? `${added.length === 1 ? 'Drawing' : `${added.length} drawings`} added to their page. Send it for approval.` : `${added.length} ${added.length === 1 ? 'photo' : 'photos'} added to their page`);
+    }
+  } finally { S.ui.orderBusy = ''; render(); }
+}
+function cadPanel(o) {
+  const list = o.cad || []; const busy = S.ui.orderBusy === `${o.id}:cad`; const id = esc(o.id); const b = S.businesses.get(o.businessId);
+  wantPhotos(list.map((c) => c.photo && c.photo.thumb).filter(Boolean));
+  const row = (c) => {
+    const a = c.answer; const day = (x) => esc(fmtDay(String(x || '').slice(0, 10)));
+    const state = !a ? '<span class="chip accent">Waiting for them</span>' : a.decision === 'ok' ? `<span class="chip good">${ico('check')}Approved ${day(a.at)}${a.by === 'you' ? ', noted by you' : ''}</span>` : `<span class="chip warn">Change asked ${day(a.at)}</span>`;
+    const pic = c.photo ? (S.photos.get(c.photo.thumb) ? `<img src="${esc(S.photos.get(c.photo.thumb))}" alt="CAD drawing">` : '<span class="filebox">…</span>') : '<span class="filebox">PDF</span>';
+    return `<div class="cadrow">${pic}<div class="stack"><div class="title-row">${state}</div>${c.note ? `<span class="sub">${esc(c.note)}</span>` : ''}${c.media ? `<span class="sub">${esc(c.media.name || 'Drawing')}, ${esc(sizeText(c.media.size))}</span>` : ''}${a && a.decision === 'change' ? `<div class="msg quote">${esc(a.comment)}</div>` : ''}
+      <div class="actions">${!a ? `<button type="button" class="btn small" data-act="cad-ok" data-id="${id}" data-val="${esc(c.id)}">${ico('check')}They approved it</button>` : ''}${a && a.by === 'shop' && !a.seenAt ? `<button type="button" class="btn small" data-act="cad-seen" data-id="${id}" data-val="${esc(c.id)}">Seen</button>` : ''}${confirmBtn(`cadx:${c.id}`, 'Remove', 'Tap again to remove', 'ofile-remove', `data-id="${id}" data-val="cad:${esc(c.id)}"`)}</div></div></div>`;
+  };
+  return `<section class="panel"><h3>CAD drawings</h3>
+    ${list.length ? list.map(row).join('') : '<p class="hint" style="margin:0">For their own design: add the CAD drawing here and send it. They approve it, or ask for a change, on their page.</p>'}
+    ${photosOn() ? `<div class="field"><label for="cad-note">What should they look at? (optional)</label><input class="input" id="cad-note" data-k="cad.note" value="${esc(fv('cad.note'))}" placeholder="e.g. Centre stone 1 ct, band 2 mm"></div>
+    <div class="actions"><label class="btn${list.length ? '' : ' primary'} file-btn${busy ? ' busy' : ''}">${ico('upload')}${busy ? 'Adding…' : 'Add a drawing'}<input type="file" accept="image/*,application/pdf,.pdf" multiple data-ofiles="${id}:cad" ${busy ? 'disabled' : ''}></label>${list.some((c) => !c.answer) && b ? `<button type="button" class="btn primary" data-act="msg" data-id="${esc(b.id)}" data-mode="cad" data-ref="${id}">${ico('share')}Send for approval</button>` : ''}</div>
+    <p class="hint" style="margin:0">A photo or screenshot of the drawing, or the PDF (up to 8 MB).</p>` : '<p class="hint" style="margin:0">Drawings can be added in the Ark Diamond app on your phone.</p>'}
+  </section>`;
+}
+function finishedPanel(o) {
+  const list = o.finished || []; const busy = S.ui.orderBusy === `${o.id}:finished`; const id = esc(o.id); wantPhotos(list.map((x) => x.thumb));
+  return `<section class="panel"><h3>Photos of the finished pieces</h3>
+    ${list.length ? `<div class="ofiles">${list.map((x, i) => `<figure>${S.photos.get(x.thumb) ? `<img src="${esc(S.photos.get(x.thumb))}" alt="Finished piece, photo ${i + 1}">` : '<span class="sub">Loading…</span>'}${confirmBtn('fin:' + x.id, 'Remove', 'Tap again to remove', 'ofile-remove', `data-id="${id}" data-val="finished:${esc(x.id)}"`)}</figure>`).join('')}</div>` : '<p class="hint" style="margin:0">They show on the shop’s order page as soon as you add them, before you ask for the balance.</p>'}
+    ${photosOn() ? `<div class="actions"><label class="btn file-btn${busy ? ' busy' : ''}">${ico('camera')}${busy ? 'Adding…' : 'Add photos'}<input type="file" accept="image/*" multiple data-ofiles="${id}:finished" ${busy ? 'disabled' : ''}></label></div>` : ''}
+  </section>`;
+}
+// What sold, a month after delivery: told by the shop on its page, or noted by you.
+function salesPanel(o) {
+  const b = S.businesses.get(o.businessId); const id = esc(o.id); const s = o.sold; const lines = o.lines || []; const pcs = lines.reduce((a, l) => a + (Number(l.qty) || 0), 0);
+  if (S.ui.orderPanel === 'sold') return `<section class="panel"><h3>Note what sold</h3>
+    ${lines.map((l, i) => `<div class="soldrow"><label for="sd-${i}">${esc(l.desc || `Item ${i + 1}`)} <span class="sub">of ${esc(Number(l.qty) || 0)}</span></label><input class="input" type="number" min="0" max="${esc(Number(l.qty) || 0)}" step="1" inputmode="numeric" id="sd-${i}" data-k="sd.${i}" value="${esc(fv('sd.' + i, s ? s.lines[i] || 0 : 0))}"></div>`).join('')}
+    <div class="actions"><button type="button" class="btn primary" data-act="sold-save" data-id="${id}">${ico('check')}Save</button><button type="button" class="btn quiet" data-act="order-panel" data-id="${id}" data-val="">Cancel</button></div></section>`;
+  const days = Number(settings().rules.salesCheckDays) || 30; const since = o.deliveredAt ? daysBetween(o.deliveredAt, todayStr()) : 0;
+  if (s) {
+    const n = (s.lines || []).reduce((a, x) => a + (Number(x) || 0), 0);
+    return `<section class="panel"><h3>What sold</h3><p style="margin:0">${esc(n)} of ${esc(pcs)} pieces sold, ${s.by === 'shop' ? 'as they told you on their page' : 'as you noted'} on ${esc(fmtDay(String(s.at).slice(0, 10)))}.</p>
+      <dl class="ledger">${lines.map((l, i) => `<dt>${esc(l.desc || `Item ${i + 1}`)}</dt><dd>${esc(Number(s.lines[i]) || 0)} of ${esc(Number(l.qty) || 0)}</dd>`).join('')}</dl>
+      <div class="actions">${b ? `<button type="button" class="btn small primary" data-act="msg" data-id="${esc(b.id)}" data-mode="reorder">${ico('share')}Suggest a reorder</button>` : ''}${s.by === 'shop' && !s.seenAt ? `<button type="button" class="btn small" data-act="sold-seen" data-id="${id}">Seen</button>` : ''}<button type="button" class="btn small quiet" data-act="order-panel" data-id="${id}" data-val="sold">Change</button></div></section>`;
+  }
+  return `<section class="panel"><h3>What sold</h3><p class="hint" style="margin:0">${o.salesAskAt ? `You asked on ${esc(fmtDay(String(o.salesAskAt).slice(0, 10)))}. They can answer on their page. ` : ''}${since >= days ? 'Ask how the pieces are selling: what sold tells you what to suggest next, and lifts your best sellers in the catalogue.' : `In ${days - since} ${days - since === 1 ? 'day' : 'days'}, ask how the pieces are selling.`}</p>
+    <div class="actions">${b ? `<button type="button" class="btn small${since >= days ? ' primary' : ''}" data-act="msg" data-id="${esc(b.id)}" data-mode="sales" data-ref="${id}">${ico('share')}Ask what sold</button>` : ''}<button type="button" class="btn small quiet" data-act="order-panel" data-id="${id}" data-val="sold">Note what sold</button></div></section>`;
+}
+
+/* ---------- best sellers: what shops told you they sold ---------- */
+// An order or quote line belongs to a design when it says so, or when it starts with the design's code ("AD-R101: …").
+function lineDesign(l) {
+  if (l && l.designId && S.prices.has(l.designId)) return S.prices.get(l.designId);
+  const desc = String((l && l.desc) || ''); return desc.includes(':') ? findDesign(desc.split(':')[0]) || null : null;
+}
+function soldByDesign() {
+  const out = new Map();
+  for (const o of S.orders.values()) {
+    if (!o.sold || !Array.isArray(o.sold.lines) || o.isExample) continue;
+    (o.lines || []).forEach((l, i) => { const n = Math.max(0, Number(o.sold.lines[i]) || 0); const d = n && lineDesign(l); if (d) out.set(d.id, (out.get(d.id) || 0) + n); });
+  }
+  return out;
+}
+// The best sellers, most sold first: designs that sold at least two pieces in all.
+const bestSellers = (sold = soldByDesign()) => [...sold.entries()].filter(([id, n]) => n >= 2 && S.prices.has(id)).sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ d: S.prices.get(id), n }));
+
+/* ---------- a short video per design: made small on the phone, kept in parts of the database ---------- */
+// A clip is played into a canvas and recorded again: up to 20 seconds, 720 pixels on its long side, no sound, about
+// 2.5 megabits a second, so a few megabytes. It's kept in parts of 384 KB (collection "media"), which the link
+// service puts back together for the online catalogue, a byte range at a time.
+const VIDEO_MAX_S = 20, VIDEO_MAX_BYTES = 9 * 1024 * 1024, MEDIA_PART = 384 * 1024, FILE_MAX_BYTES = 8 * 1024 * 1024;
+const isVideoFile = (f) => /^video\//.test(f.type || '') || /\.(mp4|mov|m4v|webm)$/i.test(f.name || '');
+const b64Bytes = (b64) => { const s = atob(b64); const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; };
+function recorderType() {
+  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return '';
+  for (const t of ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) { try { if (MediaRecorder.isTypeSupported(t)) return t; } catch { /* next */ } }
+  return '';
+}
+async function shrinkVideo(file, onTick) {
+  const url = URL.createObjectURL(file);
+  try {
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+    await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej({ code: 'bad_video' }); setTimeout(() => rej({ code: 'bad_video' }), 20000); });
+    const vw = v.videoWidth || 0, vh = v.videoHeight || 0; if (!vw || !vh) throw { code: 'bad_video' };
+    const dur = Math.min(VIDEO_MAX_S, Number(v.duration) > 0 && isFinite(v.duration) ? Number(v.duration) : VIDEO_MAX_S);
+    const type = recorderType();
+    if (!type) { if (file.size <= FILE_MAX_BYTES) return { blob: file, mime: file.type || 'video/mp4', w: vw, h: vh, dur: round2(dur) }; throw { code: 'no_recorder' }; }
+    const k = Math.min(1, 720 / Math.max(vw, vh)); const w = Math.max(2, Math.round((vw * k) / 2) * 2), h = Math.max(2, Math.round((vh * k) / 2) * 2);
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+    const rec = new MediaRecorder(c.captureStream(30), { mimeType: type, videoBitsPerSecond: 2500000 });
+    const parts = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+    const done = new Promise((res) => { rec.onstop = res; });
+    let stopped = false; let last = -1;
+    const stop = () => { if (stopped) return; stopped = true; try { v.pause(); } catch { /* already */ } if (rec.state !== 'inactive') rec.stop(); };
+    const draw = () => {
+      if (stopped) return; g.drawImage(v, 0, 0, w, h);
+      const s = Math.floor(v.currentTime); if (s !== last && onTick) { last = s; onTick(s, Math.ceil(dur)); }
+      if (v.currentTime >= dur || v.ended) { stop(); return; }
+      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw); else requestAnimationFrame(draw);
+    };
+    v.onended = stop; g.drawImage(v, 0, 0, w, h); rec.start(500);
+    try { await v.play(); } catch { stop(); throw { code: 'bad_video' }; }
+    draw(); setTimeout(stop, (dur + 4) * 1000);
+    await done;
+    const mime = type.split(';')[0]; const blob = new Blob(parts, { type: mime });
+    if (!blob.size) throw { code: 'bad_video' };
+    if (blob.size > VIDEO_MAX_BYTES) throw { code: 'too_big' };
+    return { blob, mime, w, h, dur: round2(Math.min(dur, v.currentTime || dur)) };
+  } finally { URL.revokeObjectURL(url); }
+}
+// A file kept in parts: the parts first, then the record that names them, so a half-saved file is never used.
+async function saveMedia(meta, blob, onPart) {
+  const bytes = new Uint8Array(await blob.arrayBuffer()); const id = 'md-' + newTrack().slice(0, 14); const parts = Math.max(1, Math.ceil(bytes.length / MEDIA_PART));
+  for (let i = 0; i < parts; i++) {
+    if (!(await write(() => Data.set('media', `${id}.${i}`, { mediaId: id, i, b64: toBase64(bytes.subarray(i * MEDIA_PART, (i + 1) * MEDIA_PART)) })))) return null;
+    if (onPart) onPart(i + 1, parts);
+  }
+  if (!(await write(() => Data.set('media', id, { ...meta, size: bytes.length, partSize: MEDIA_PART, parts, createdAt: nowIso() })))) return null;
+  return { id, size: bytes.length, parts, mime: meta.mime };
+}
+function removeMedia(m) {
+  if (!m || !m.id || S.mode !== 'db') return;
+  for (let i = 0; i < (Number(m.parts) || 0); i++) Data.remove('media', `${m.id}.${i}`).catch(() => {});
+  Data.remove('media', m.id).catch(() => {});
+}
+// The preview in the app: the parts are fetched once and played from the phone.
+function wantVideo(v) {
+  if (!v || !v.id || S.videos.has(v.id) || S.videoWant.has(v.id) || !photosOn()) return;
+  S.videoWant.add(v.id);
+  const ids = Array.from({ length: Number(v.parts) || 0 }, (_, i) => `${v.id}.${i}`);
+  DB.fetchDocs('media', ids).then((m) => {
+    const parts = ids.map((id) => m.get(id)); if (!parts.length || parts.some((x) => !x || !x.b64)) throw new Error('missing');
+    S.videos.set(v.id, URL.createObjectURL(new Blob(parts.map((x) => b64Bytes(x.b64)), { type: v.mime || 'video/mp4' }))); schedule();
+  }).catch(() => { S.videoWant.delete(v.id); });
+}
+async function addVideo(designId, file) {
+  const d = S.prices.get(designId); if (!d || !photosOn()) return;
+  if (!isVideoFile(file)) { toast('Choose a video: MP4 or MOV from the camera.'); return; }
+  const busy = (text) => { S.ui.videoBusy = { id: designId, text }; render(); };
+  busy('Making the video smaller…');
+  try {
+    const v = await shrinkVideo(file, (s, n) => busy(`Making the video smaller… ${s} of ${n} s`));
+    busy('Saving the video…');
+    const m = await saveMedia({ kind: 'video', designId, mime: v.mime, w: v.w, h: v.h, dur: v.dur }, v.blob, (i, n) => busy(`Saving the video… ${Math.round((i / n) * 100)}%`));
+    if (!m) return;
+    const old = (S.prices.get(designId) || d).video;
+    if (await write(() => Data.update('prices', designId, { video: { id: m.id, mime: v.mime, size: m.size, parts: m.parts, w: v.w, h: v.h, dur: v.dur }, updatedAt: nowIso() }))) {
+      if (old && old.id !== m.id) removeMedia(old);
+      S.videos.set(m.id, URL.createObjectURL(v.blob)); toast(`Video added: ${pdfN(v.dur)} seconds, ${sizeText(m.size)}`);
+    }
+  } catch (e) {
+    toast(e && e.code === 'too_big' ? 'That video is too big even after making it smaller. Trim it to 15 seconds and try again.'
+      : e && e.code === 'no_recorder' ? "This phone can't make videos smaller here. Choose a clip under 8 MB, or add it from another phone."
+      : "That video couldn't be read. Try an MP4 or MOV from the phone's camera.");
+  } finally { S.ui.videoBusy = null; render(); }
+}
 // Many photos at once, each going to the design its file is named after: AD-R101.jpg, AD-R101-2.jpg, AD-R101 (3).jpg.
 const sepKey = (s) => String(s || '').trim().toLowerCase().replace(/\.[a-z0-9]{2,5}$/, '').replace(/[\s_.]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 function photoMatcher() {
@@ -5013,27 +5566,27 @@ function designLoadSection(all) {
     <p class="hint" style="margin:0">Your price list is a PDF? Send it to Claude in chat, and Claude adds the designs for you.</p></section>`;
 }
 
-function designCard(d, cur, r) {
-  const p = d.inputs || {}; const price = calcPrice({ ...p }, r).fx[cur]; const ph = (d.photos || [])[0];
+function designCard(d, cur, r, soldMap) {
+  const p = d.inputs || {}; const price = calcPrice({ ...p }, r).fx[cur]; const ph = (d.photos || [])[0]; const sold = (soldMap && soldMap.get(d.id)) || 0;
   const src = ph ? S.photos.get(ph.thumb) || S.photos.get(ph.id) || '' : ''; const sel = S.designSel.has(d.id);
   return `<article class="dcard${sel ? ' on' : ''}">
     <input type="checkbox" class="pick dpick" data-dsel="${esc(d.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(designName(d))}">
     <div class="dphoto">${src ? `<img src="${esc(src)}" alt="${esc(designName(d))}">` : ph ? '<span class="sub">Loading photo…</span>' : `<button type="button" class="btn small" data-act="design-photos" data-id="${esc(d.id)}">${ico('camera')}Add photos</button>`}</div>
     <div class="stack"><b>${esc(designName(d))}</b><span class="sub">${esc(localTerms(pcDesc({ ...p, code: '' }), focusNow().country))}</span>
       <div class="meta">${price ? `<span class="dprice">${esc(fxFmt(cur, price))}</span>` : '<span>Add today\'s rates in Prices</span>'}${cur === 'GBP' && shopPrice(price) ? `<span>Shop price about £${shopPrice(price).toLocaleString('en-GB')}</span>` : ''}${d.category ? `<span>${esc(DESIGN_CAT_LABEL[d.category] || '')}</span>` : ''}${(d.photos || []).length > 1 ? `<span>${d.photos.length} photos</span>` : ''}</div>
-      ${kitHas(d.id) || d.hidden ? `<div class="tags">${kitHas(d.id) ? `<span class="chip gold">${ico('gem')}In the sample kit</span>` : ''}${d.hidden ? '<span class="chip">Not in the online catalogue</span>' : ''}</div>` : ''}</div>
-    <div class="actions">${moreMenu('d:' + d.id, `<button class="btn small" data-act="design-photos" data-id="${esc(d.id)}">${ico('camera')}Photos</button><button class="btn small" data-act="design-edit" data-id="${esc(d.id)}">Edit</button><button class="btn small" data-act="pc-load" data-id="${esc(d.id)}">${ico('calc')}Change the price</button>`)}</div>
+      ${kitHas(d.id) || d.hidden || d.ready > 0 || d.video || sold ? `<div class="tags">${d.ready > 0 ? `<span class="chip good">${ico('box')}Ready to ship: ${esc(d.ready)}</span>` : ''}${sold >= 2 ? `<span class="chip gold">${ico('spark')}Best seller: ${esc(sold)} sold</span>` : sold ? `<span class="chip">${esc(sold)} sold</span>` : ''}${d.video ? `<span class="chip">${ico('play')}Video</span>` : ''}${kitHas(d.id) ? `<span class="chip gold">${ico('gem')}In the sample kit</span>` : ''}${d.hidden ? '<span class="chip">Not in the online catalogue</span>' : ''}</div>` : ''}</div>
+    <div class="actions">${moreMenu('d:' + d.id, `<button class="btn small" data-act="design-photos" data-id="${esc(d.id)}">${ico('camera')}Photos and video</button><button class="btn small" data-act="design-edit" data-id="${esc(d.id)}">Edit</button><button class="btn small" data-act="pc-load" data-id="${esc(d.id)}">${ico('calc')}Change the price</button>`)}</div>
   </article>`;
 }
 function designsView() {
-  const all = designList(); const cat = S.ui.designCat || 'all'; const r = pcRates(); const cur = designCur();
-  const list = all.filter((d) => cat === 'all' || (d.category || 'other') === cat);
+  const all = designList(); const cat = S.ui.designCat || 'all'; const r = pcRates(); const cur = designCur(); const soldMap = soldByDesign();
+  const list = all.filter((d) => cat === 'all' || (cat === 'ready' ? d.ready > 0 : (d.category || 'other') === cat));
   wantPhotos(list.map((d) => ((d.photos || [])[0] || {}).thumb));
   const n = S.designSel.size; const cats = DESIGN_CATS.filter(([k]) => all.some((d) => (d.category || 'other') === k));
   return `<header class="head"><div><h1>Designs</h1><p>Your pieces with photos and today's prices. Tick a few to send a shop, make a PDF catalogue or start a quote.</p></div><div class="actions"><a class="btn primary" href="#prices">${ico('plus')}Add a design</a></div></header>
   ${all.length ? catalogueSection(all) : designLoadSection(all)}
-  ${all.length ? `<div class="filters">${selectHtml('d-cur', 'data-dcur="1" aria-label="Prices in"', FX.map(([c]) => [c, `Prices in ${c}`]), cur)}${selectHtml('d-lang', 'data-dlang="1" aria-label="Language of the PDF and the sharing text"', [['en', 'PDF in English'], ['fr', 'PDF en français']], designLang())}</div>${cats.length > 1 ? seg('dcat', cat, [['all', `All ${all.length}`], ...cats.map(([k, l]) => [k, `${l} ${all.filter((d) => (d.category || 'other') === k).length}`])]) : ''}` : ''}
-  ${list.length ? `<div class="designs">${list.map((d) => designCard(d, cur, r)).join('')}</div>` : emptyBox(all.length ? 'No designs in this group.' : 'No designs yet. Import your list above, or work out a piece in Prices and tap Save to price list. It shows here, ready for photos.', `<a class="btn" href="#prices">${ico('calc')}Prices</a>`)}
+  ${all.length ? `<div class="filters">${selectHtml('d-cur', 'data-dcur="1" aria-label="Prices in"', [...FX.map(([c]) => [c, `Prices in ${c}`]), ['INR', 'Prices in INR, for India']], cur)}${selectHtml('d-lang', 'data-dlang="1" aria-label="Language of the PDF and the sharing text"', [['en', 'PDF in English'], ['fr', 'PDF en français']], designLang())}</div>${cats.length > 1 || all.some((d) => d.ready > 0) ? seg('dcat', cat, [['all', `All ${all.length}`], ...(all.some((d) => d.ready > 0) ? [['ready', `Ready to ship ${all.filter((d) => d.ready > 0).length}`]] : []), ...(cats.length > 1 ? cats.map(([k, l]) => [k, `${l} ${all.filter((d) => (d.category || 'other') === k).length}`]) : [])]) : ''}` : ''}
+  ${list.length ? `<div class="designs">${list.map((d) => designCard(d, cur, r, soldMap)).join('')}</div>` : emptyBox(all.length ? 'No designs in this group.' : 'No designs yet. Import your list above, or work out a piece in Prices and tap Save to price list. It shows here, ready for photos.', `<a class="btn" href="#prices">${ico('calc')}Prices</a>`)}
   ${all.length ? designLoadSection(all) : ''}
   ${n ? `<div class="selbar many" role="region" aria-label="Selected designs"><span><b>${n}</b> ${n === 1 ? 'design' : 'designs'}</span><button type="button" class="btn quiet" data-act="dsel-clear">Clear</button><button type="button" class="btn" data-act="designs-pdf">${ico('doc')}PDF</button><button type="button" class="btn" data-act="kit-add">${ico('gem')}Add to kit</button><button type="button" class="btn" data-act="designs-share">${ico('share')}Send</button><button type="button" class="btn primary" data-act="designs-quote">${ico('doc')}Quote</button></div><div class="selbar-space" aria-hidden="true"></div>` : ''}`;
 }
@@ -5051,7 +5604,8 @@ function sampleKit() {
 // The kit is priced in pounds; other currencies go through the rupee rates saved on the Prices page.
 function kitPriceIn(cur, k = sampleKit()) {
   if (!k || !k.price) return 0; if (cur === 'GBP') return k.price;
-  const r = settings().pricing.rates; const gbp = Number(r.GBP) || 0, x = Number(r[cur]) || 0;
+  const r = settings().pricing.rates; const gbp = Number(r.GBP) || 0, x = cur === 'INR' ? 1 : Number(r[cur]) || 0;
+  if (cur === 'INR') return gbp ? roundUp(k.price * gbp, Number(settings().pricing.roundINR) || 10) : 0;
   return gbp && x ? roundUp((k.price * gbp) / x, Number(settings().pricing.round) || 0) : 0;
 }
 // What messages offer: the kit when there is one, otherwise a few samples.
@@ -5061,16 +5615,19 @@ function sampleOffer(country) {
   return `our sample kit of ${k.ids.length} ${k.ids.length === 1 ? 'piece' : 'pieces'}${p ? ` for ${fxFmt(cur, p)}` : ''}${p && k.credit ? ', taken off your first order' : ''}`;
 }
 function catalogueDoc(list) {
-  const st = settings(); const co = st.company; const pr = st.pricing; const r = { gold24: pr.gold24, silver: pr.silver, round: pr.round, rates: pr.rates };
+  const st = settings(); const co = st.company; const pr = st.pricing; const r = { gold24: pr.gold24, silver: pr.silver, round: pr.round, roundINR: pr.roundINR, rates: pr.rates };
+  const sold = soldByDesign(); const order = new Map(list.map((d, i) => [d.id, i]));
+  const best = (d) => { const n = sold.get(d.id) || 0; return n >= 2 ? n : 0; };
+  list = [...list].sort((a, b) => best(b) - best(a) || order.get(a.id) - order.get(b.id));
   const designs = list.map((d) => {
     const p = d.inputs || {}; const c = calcPrice({ ...p }, r);
-    return { id: d.id, code: designName(d), category: d.category || 'other', desc: localTerms(pcDesc({ ...p, code: '' }), UK), metal: METAL_SHORT[p.metal] || '', mk: p.metal || '', weight: Number(p.weight) || 0, ct: round2((Number(p.ct1) || 0) + (Number(p.ct2) || 0)), note: String(d.note || '').slice(0, 500), photos: (d.photos || []).map((x) => ({ id: x.id, thumb: x.thumb, w: x.w, h: x.h })), price: c.fx, shopGBP: shopPrice(c.fx.GBP) };
+    return { id: d.id, code: designName(d), category: d.category || 'other', desc: localTerms(pcDesc({ ...p, code: '' }), UK), metal: METAL_SHORT[p.metal] || '', mk: p.metal || '', weight: Number(p.weight) || 0, ct: round2((Number(p.ct1) || 0) + (Number(p.ct2) || 0)), note: String(d.note || '').slice(0, 500), photos: (d.photos || []).map((x) => ({ id: x.id, thumb: x.thumb, w: x.w, h: x.h })), price: c.fx, shopGBP: shopPrice(c.fx.GBP), ...(d.ready > 0 ? { ready: Math.round(d.ready) } : {}), ...(d.video && d.video.id ? { video: { id: d.video.id, w: d.video.w || 0, h: d.video.h || 0 } } : {}), ...(best(d) ? { best: best(d) } : {}) };
   });
   const k = sampleKit(); const ids = k ? k.ids.filter((id) => list.some((d) => d.id === id)) : [];
   return {
     publishedAt: nowIso(), ratesAt: pr.ratesAt || '', retail: retailOf(pr), designs,
     company: { name: co.name || 'Ark Diamond', email: co.senderEmail || '', whatsapp: co.whatsapp || '', website: co.website || '', address: co.address || '' },
-    kit: k && ids.length ? { ids, credit: k.credit, prices: Object.fromEntries(FX.map(([cur]) => [cur, kitPriceIn(cur, k)]).filter(([, v]) => v)) } : null,
+    kit: k && ids.length ? { ids, credit: k.credit, prices: Object.fromEntries([...FX.map(([cur]) => cur), 'INR'].map((cur) => [cur, kitPriceIn(cur, k)]).filter(([, v]) => v)) } : null,
   };
 }
 async function publishCatalogue(quiet) {
@@ -5085,7 +5642,7 @@ async function publishCatalogue(quiet) {
 }
 function catalogueSection(all) {
   const c = settings().catalogue; const pr = settings().pricing; const shown = all.filter((d) => !d.hidden).length; const live = catalogueReady();
-  const stale = !!c.publishedAt && (all.some((d) => String(d.updatedAt || '') > c.publishedAt) || String(pr.ratesAt || '') > String(c.publishedAt).slice(0, 10) || shown !== Number(c.count));
+  const stale = !!c.publishedAt && (all.some((d) => String(d.updatedAt || '') > c.publishedAt) || [...S.orders.values()].some((o) => o.sold && String(o.sold.at || '') > c.publishedAt) || String(pr.ratesAt || '') > String(c.publishedAt).slice(0, 10) || shown !== Number(c.count));
   const status = c.publishedAt ? `${c.count} ${Number(c.count) === 1 ? 'design' : 'designs'} online since ${fmtWhen(c.publishedAt)}${stale ? '. Designs or rates changed since then: update it so shops see today\'s.' : '.'}` : 'Put your designs on a page of their own. Each shop gets its own link, so you see which designs it looked at. The price-list link shows the same page with your prices and a suggested UK shop price.';
   return `<section class="panel"><div class="sec-head"><h3 style="margin:0">Online catalogue</h3><span class="chip ${live ? 'good' : ''}">${live ? `${ico('check')}In your messages` : c.publishedAt ? 'Not in messages' : 'Not online yet'}</span></div>
     <p class="hint" style="margin:0">${esc(status)}</p>
@@ -5107,10 +5664,22 @@ function designPhotosModal() {
   const d = S.prices.get(S.layer.id); if (!d) return '';
   const list = d.photos || []; wantPhotos(list.map((p) => p.thumb)); const busy = S.ui.photoBusy === d.id;
   return `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="dp-title">
-    <div class="layer-head"><div><div class="eyebrow">${esc(designName(d))}</div><h2 id="dp-title">Photos</h2></div>${closeBtn()}</div>
+    <div class="layer-head"><div><div class="eyebrow">${esc(designName(d))}</div><h2 id="dp-title">Photos and video</h2></div>${closeBtn()}</div>
     ${list.length ? `<div class="dphotos">${list.map((p, i) => `<figure>${S.photos.get(p.thumb) ? `<img src="${esc(S.photos.get(p.thumb))}" alt="Photo ${i + 1} of ${esc(designName(d))}">` : '<span class="sub">Loading…</span>'}${confirmBtn('ph:' + p.id, 'Remove', 'Tap again to remove', 'photo-remove', `data-id="${esc(d.id)}" data-val="${esc(p.id)}"`)}</figure>`).join('')}</div>` : '<p class="hint" style="margin:0">No photos yet. The first photo shows on the card and in the PDF.</p>'}
     ${photosOn() ? `<label class="btn primary file-btn${busy ? ' busy' : ''}">${ico('camera')}${busy ? 'Adding…' : 'Add photos'}<input type="file" accept="image/*" multiple data-photos="${esc(d.id)}" ${busy ? 'disabled' : ''}></label><label class="switch"><input type="checkbox" id="dp-tidy" data-photoclean="1" ${settings().photoClean ? 'checked' : ''}>Tidy them: square, centred, on white</label><p class="hint" style="margin:0">Up to 6. They're made smaller on your phone first, and only you and your team can see them.</p>` : '<p class="hint" style="margin:0">Photos work in the Ark Diamond app on your phone.</p>'}
+    ${photosOn() ? designVideoPanel(d) : ''}
     <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Done</button></div></div>`;
+}
+function designVideoPanel(d) {
+  const v = d.video; const busy = S.ui.videoBusy && S.ui.videoBusy.id === d.id; if (v) wantVideo(v); const src = v && S.videos.get(v.id);
+  return `<section class="vidbox"><h3>Video</h3>
+    ${v ? `<div class="vidframe">${src ? `<video src="${esc(src)}" controls muted loop playsinline preload="metadata" aria-label="Video of ${esc(designName(d))}"></video>` : '<span class="sub">Loading the video…</span>'}</div>
+      <p class="hint" style="margin:0">${esc(pdfN(v.dur || 0))} seconds, ${esc(sizeText(v.size))}. It plays first when a shop opens this design in your online catalogue.</p>
+      <div class="actions">${busy ? '' : `<label class="btn small file-btn">${ico('refresh')}Change it<input type="file" accept="video/*" data-video="${esc(d.id)}"></label>`}${confirmBtn('vid:' + d.id, 'Remove', 'Tap again to remove', 'video-remove', `data-id="${esc(d.id)}"`)}</div>`
+    : `<p class="hint" style="margin:0">A short clip, turning the piece in the light, shows the sparkle better than a photo. Up to 20 seconds; the phone makes it smaller and leaves out the sound.</p>
+      ${busy ? '' : `<label class="btn file-btn">${ico('play')}Add a video<input type="file" accept="video/*" data-video="${esc(d.id)}"></label>`}`}
+    ${busy ? `<p class="warnline" role="status">${ico('clock')}${esc(S.ui.videoBusy.text)}</p>` : ''}
+  </section>`;
 }
 function designEditModal() {
   const d = S.prices.get(S.layer.id); if (!d) return '';
@@ -5119,6 +5688,7 @@ function designEditModal() {
     <div class="field"><label for="de-code">Design code or name</label><input class="input" id="de-code" data-k="de.code" value="${esc(fv('de.code', (d.inputs || {}).code || ''))}"></div>
     <div class="field"><label for="de-cat">Kind of piece</label>${selectHtml('de-cat', 'data-k="de.cat"', DESIGN_CATS, fv('de.cat', d.category || ''), 'Choose')}</div>
     <div class="field"><label for="de-note">Note</label><textarea class="input" id="de-note" data-k="de.note" style="min-height:60px" placeholder="Sizes, stones, how long it takes to make">${esc(fv('de.note', d.note || ''))}</textarea></div>
+    <div class="field"><label for="de-ready">Pieces ready to ship within a week</label><input class="input" type="number" min="0" max="999" step="1" inputmode="numeric" id="de-ready" data-k="de.ready" value="${esc(fv('de.ready', d.ready || 0))}"><span class="hint">Shops see "Ready to ship" on it in your catalogue. When an order with this design starts production, the app takes what it uses.</span></div>
     <label class="switch"><input type="checkbox" id="de-show" data-k="de.show" ${fv('de.show', !d.hidden) ? 'checked' : ''}>Show in the online catalogue</label>
     <p class="hint" style="margin:0">To change the metal, weight or stones, use Change the price on the design.</p>
     <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="submit" class="btn primary">${ico('check')}Save</button></div>
@@ -5130,7 +5700,7 @@ function designQuoteModal() {
   return `<form class="modal" role="dialog" aria-modal="true" aria-labelledby="dq-title" data-form="dquote">
     <div class="layer-head"><h2 id="dq-title">Quote ${n} ${n === 1 ? 'design' : 'designs'}</h2>${closeBtn()}</div>
     <div class="field"><label for="dq-buyer">For</label>${selectHtml('dq-buyer', 'data-k="dq.buyer"', buyers.map((x) => [x.id, `${x.name}${x.city ? ', ' + x.city : ''}`]), fv('dq.buyer', ''), 'Choose a shop')}</div>
-    <p class="hint" style="margin:0">Each design becomes a line at today's price in ${esc(designCur())}. You can change quantities and prices before you send it.</p>
+    <p class="hint" style="margin:0">Each design becomes a line at today's price in ${esc(designCur())}, or in rupees for a shop in India. You can change quantities and prices before you send it.</p>
     <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="submit" class="btn primary">${ico('doc')}Start the quote</button></div>
   </form>`;
 }
@@ -5138,13 +5708,13 @@ function designsPdf(list, cur, lang = 'en') {
   const fr = lang === 'fr'; const co = settings().company; const company = co.name || 'Ark Diamond'; const r = pcRates(); const country = focusNow().country;
   const pdf = pdfDoc({ title: fr ? `Catalogue ${company}` : `${company} catalogue`, author: company });
   const M = 46, R = pdf.W - M, CW = R - M; const NAVY = '#0B1124', GOLD = '#A47E35', INK = '#1E2533', MUTED = '#5F6878', SOFT = '#F7F3EA';
-  const colW = (CW - 18) / 2, boxH = 200, cardH = boxH + 60; let y = 0, col = 0;
+  const colW = (CW - 18) / 2, boxH = 200, cardH = boxH + 70; let y = 0, col = 0;
   const top = () => { pdf.addPage(); y = 56; pdf.text(M, y, company.toUpperCase(), { f: 'TB', size: 15, sp: 2, color: NAVY }); pdf.text(R, y, 'CATALOGUE', { f: 'B', size: 8, sp: 1.3, color: GOLD, align: 'right' }); y += 11; pdf.line(M, y, R, y, { color: GOLD, w: 0.9 }); y += 24; };
   top();
   const rv = retailOf();
   const intro = fr
     ? `Bijoux en diamants créés en laboratoire. Prix de gros en ${CUR_FR[cur] || cur}, au taux du ${fmtDateFr(todayStr())}.${cur === 'GBP' ? ` Les prix suggérés en magasin au Royaume-Uni comprennent une majoration de ${numFr(rv.markup)} fois et ${numFr(rv.vat)} % de TVA.` : ''}`
-    : localTerms(`Lab-grown diamond jewellery. Wholesale prices in ${cur} at today's rates, ${fmtDate(todayStr())}.${cur === 'GBP' ? ` Suggested UK shop prices use a ${rv.markup}× mark-up plus ${rv.vat}% VAT.` : ''}`, country);
+    : localTerms(`Lab-grown diamond jewellery. Wholesale prices in ${cur} at today's rates, ${fmtDate(todayStr())}${cur === 'INR' ? `, plus ${GST_JEWELLERY}% GST` : ''}.${cur === 'GBP' ? ` Suggested UK shop prices use a ${rv.markup}× mark-up plus ${rv.vat}% VAT.` : ''}`, country);
   for (const ln of pdfWrap(intro, 'R', 9, CW)) { pdf.text(M, y, ln, { size: 9, color: MUTED }); y += 12; }
   y += 12;
   for (const d of list) {
@@ -5157,7 +5727,8 @@ function designsPdf(list, cur, lang = 'en') {
     pdf.text(x, ty, pdfFit(designName(d), 'B', 10.5, colW - 70), { f: 'B', size: 10.5, color: INK });
     if (price) pdf.text(x + colW, ty, (fr ? fxFmtFr : fxFmt)(cur, price), { f: 'B', size: 10.5, color: NAVY, align: 'right' });
     ty += 13; for (const ln of pdfWrap(fr ? pcDescFr({ ...(d.inputs || {}), code: '' }) : localTerms(pcDesc({ ...(d.inputs || {}), code: '' }), country), 'R', 8.5, colW).slice(0, 2)) { pdf.text(x, ty, ln, { size: 8.5, color: MUTED }); ty += 11; }
-    if (cur === 'GBP' && shopPrice(price)) pdf.text(x, ty, fr ? `Prix suggéré en magasin : environ ${numFr(shopPrice(price), 0)} £, TVA comprise` : `Suggested UK shop price £${shopPrice(price).toLocaleString('en-GB')} incl. VAT`, { size: 8, color: GOLD });
+    if (cur === 'GBP' && shopPrice(price)) { pdf.text(x, ty, fr ? `Prix suggéré en magasin : environ ${numFr(shopPrice(price), 0)} £, TVA comprise` : `Suggested UK shop price £${shopPrice(price).toLocaleString('en-GB')} incl. VAT`, { size: 8, color: GOLD }); ty += 11; }
+    if (d.ready > 0) pdf.text(x, ty, fr ? `Prête à expédier sous une semaine : ${d.ready} ${d.ready === 1 ? 'pièce' : 'pièces'}` : `Ready to ship within a week: ${d.ready} ${d.ready === 1 ? 'piece' : 'pieces'}`, { f: 'B', size: 8, color: '#17603B' });
     col = 1 - col; if (col === 0) y += cardH;
   }
   const n = pdf.pageCount; const foot = [company, co.whatsapp ? `WhatsApp ${co.whatsapp}` : '', co.senderEmail, co.website].filter(Boolean).join('  ·  ');
@@ -5307,6 +5878,7 @@ function bizDrawer(b) {
     ${['found', 'rejected'].includes(b.status) ? '' : quotesPanel(b) + ordersPanel(b) + samplesPanel(b)}
     ${similarPanel(b)}
     ${catalogueViewsPanel(b)}
+    ${['found', 'rejected'].includes(b.status) ? '' : shopPagesPanel(b)}
     ${stockPanel(b)}
     <section class="panel"><h3>Contact</h3>${rows.length ? `<dl class="kv">${rows.map(([k, v, raw]) => `<dt>${k}</dt><dd>${raw ? v : esc(v)}</dd>`).join('')}</dl>` : '<p class="hint">No contact details yet.</p>'}
       ${emailBad(b) ? `<p class="warnline">${ico('alert')}This email address can't receive mail: ${esc(EMAIL_WHY[emailCheckOf(b).why] || EMAIL_WHY.no_mail)}. Look for another address on their website, then edit the details.</p>` : ''}
@@ -5377,9 +5949,10 @@ function leadPanel(b) {
 }
 function quotesPanel(b) {
   const list = quotesOf(b.id);
-  return `<section class="panel"><h3>Quotes</h3>${list.length ? list.map((q) => `<div class="srow"><div class="stack"><div class="title-row"><b>${esc(q.number)}</b><span class="chip ${QUOTE_TONE[q.status] || ''}">${esc(QUOTE_LABEL[q.status] || q.status)}</span>${q.status === 'sent' && q.validUntil && q.validUntil < todayStr() ? '<span class="chip warn">past its date</span>' : ''}${exChip(q)}</div>
-      <div class="meta"><span>${esc(fmtMoney(quoteTotal(q), q.currency))}</span><span>${esc(q.incoterm)}</span><span>${(q.lines || []).length} ${(q.lines || []).length === 1 ? 'item' : 'items'}</span><span>${esc(fmtDay(String(q.createdAt).slice(0, 10)))}</span></div></div>
-      <div class="actions"><button class="btn small" data-act="quote-copy" data-id="${esc(q.id)}">${ico('copy')}Copy</button><button class="btn small" data-act="quote-download" data-id="${esc(q.id)}">${ico('download')}Download</button>${q.status === 'draft' ? `<button class="btn small" data-act="quote-status" data-id="${esc(q.id)}" data-val="sent">Mark sent</button>` : ''}${q.status === 'sent' ? `<button class="btn small primary" data-act="quote-status" data-id="${esc(q.id)}" data-val="accepted">Accepted</button><button class="btn small quiet" data-act="quote-status" data-id="${esc(q.id)}" data-val="declined">Declined</button>` : ''}${q.status === 'accepted' ? `<button class="btn small primary" data-act="order-from-quote" data-id="${esc(q.id)}">${ico('receipt')}Make proforma</button>` : ''}<button class="btn small quiet" data-act="quote-edit" data-id="${esc(q.id)}">Edit</button></div></div>`).join('') : '<p class="hint">When they ask for prices, build a quote here, copy it into your reply, and mark it accepted when they order.</p>'}
+  return `<section class="panel"><h3>Quotes</h3>${list.length ? list.map((q) => `<div class="srow"><div class="stack"><div class="title-row"><b>${esc(q.number)}</b><span class="chip ${QUOTE_TONE[q.status] || ''}">${esc(QUOTE_LABEL[q.status] || q.status)}</span>${q.status === 'sent' && q.validUntil && q.validUntil < todayStr() ? '<span class="chip warn">past its date</span>' : ''}${q.acceptedVia === 'link' ? `<span class="chip good">${ico('check')}Accepted on their page</span>` : ''}${q.status === 'sent' && driftOf(q) && driftOf(q).pct >= (Number(settings().rules.goldMovePct) || 2) ? `<span class="chip warn">${ico('trend')}Today ${esc(pctShort(driftOf(q).pct))}% more</span>` : ''}${exChip(q)}</div>
+      ${q.acceptNote ? `<div class="msg quote">${esc(trunc(q.acceptNote, 240))}</div>` : ''}
+      <div class="meta"><span>${esc(fmtMoney(round2(quoteTotal(q) + quoteGst(q)), q.currency))}${quoteGst(q) ? ' with GST' : ''}</span><span>${esc(q.incoterm)}</span><span>${(q.lines || []).length} ${(q.lines || []).length === 1 ? 'item' : 'items'}</span><span>${esc(fmtDay(String(q.createdAt).slice(0, 10)))}</span></div></div>
+      <div class="actions">${q.status === 'sent' ? `<button class="btn small" data-act="msg" data-id="${esc(b.id)}" data-mode="quote" data-ref="${esc(q.id)}">${ico('share')}Send with link</button>` : ''}<button class="btn small" data-act="quote-copy" data-id="${esc(q.id)}">${ico('copy')}Copy</button><button class="btn small" data-act="quote-download" data-id="${esc(q.id)}">${ico('download')}Download</button>${q.status === 'draft' ? `<button class="btn small" data-act="quote-status" data-id="${esc(q.id)}" data-val="sent">Mark sent</button>` : ''}${q.status === 'sent' ? `<button class="btn small primary" data-act="quote-status" data-id="${esc(q.id)}" data-val="accepted">Accepted</button><button class="btn small quiet" data-act="quote-status" data-id="${esc(q.id)}" data-val="declined">Declined</button>` : ''}${q.status === 'accepted' ? `<button class="btn small primary" data-act="order-from-quote" data-id="${esc(q.id)}">${ico('receipt')}Make proforma</button>` : ''}<button class="btn small quiet" data-act="quote-edit" data-id="${esc(q.id)}">Edit</button></div></div>`).join('') : '<p class="hint">When they ask for prices, build a quote here, copy it into your reply, and mark it accepted when they order.</p>'}
     <div><button class="btn small" data-act="quote-new" data-id="${esc(b.id)}">${ico('doc')}New quote</button></div></section>`;
 }
 function sampleButtons(x) {
@@ -5520,9 +6093,9 @@ function quoteModal() {
     <div class="grid3">
       <div class="field"><label for="q-ship">Shipping and insurance</label><input class="input" type="number" min="0" step="0.01" id="q-ship" data-q="shipping" value="${esc(d.shipping)}"></div>
       ${d.currency !== 'USD' ? `<div class="field"><label for="q-rate">1 ${esc(d.currency)} in US$, for reports</label><input class="input" type="number" min="0" step="0.0001" id="q-rate" data-q="usdRate" value="${esc(d.usdRate)}"></div>` : '<div></div>'}
-      <div class="field"><span class="lab">Total</span><b class="qtotal">${esc(fmtMoney(quoteTotal(d), d.currency))}</b></div>
+      <div class="field"><span class="lab">Total</span><b class="qtotal">${esc(fmtMoney(quoteTotal(d), d.currency))}</b>${quoteGstFor(d, b) ? `<span class="hint">${esc(gstLabel(quoteGstFor(d, b)))} ${esc(fmtMoney(quoteGst({ ...d, gst: quoteGstFor(d, b) }), d.currency))}, ${esc(fmtMoney(round2(quoteTotal(d) + quoteGst({ ...d, gst: quoteGstFor(d, b) })), d.currency))} with GST</span>` : ''}</div>
     </div>
-    ${landedPanel(d)}
+    ${inIndia(b.country) ? (d.currency === 'INR' ? '' : `<p class="hint" style="margin:0">A shop in India is usually quoted in rupees, plus ${GST_JEWELLERY}% GST.</p>`) : landedPanel(d)}
     <div class="field"><label for="q-notes">Notes for the buyer</label><textarea class="input" id="q-notes" data-q="notes" style="min-height:70px" placeholder="Payment terms, delivery time, certificates">${esc(d.notes || '')}</textarea></div>
     <div class="actions" style="justify-content:flex-end"><button type="button" class="btn quiet" data-act="close-layer">Cancel</button><button type="button" class="btn" data-act="quote-save" data-val="draft">Save draft</button><button type="button" class="btn primary" data-act="quote-save" data-val="sent">${ico('check')}Save as sent</button></div>
   </form>`;
@@ -5873,10 +6446,10 @@ async function onClick(e) {
   if (act === 'mail-open') { const fresh = el.dataset.mail ? mailFor(el.dataset.mail) : ''; if (fresh) el.href = fresh; if (el.dataset.key) { S.mailOpened.add(el.dataset.key); setTimeout(schedule, 700); } return; }
   if (act === 'wa-reply') { const b = S.businesses.get(id); const c = b ? contactOf(b) : {}; const fresh = b ? waUrl(c.whatsapp || c.phone, String(fv('draft.' + id))) : ''; if (fresh) el.href = fresh; return; }
   if (act === 'fu-sent') {
-    const b = S.businesses.get(id); if (!b) return; const c = contactOf(b); const text = String(fv('fu.text', followUpText(b, docLang(b))));
-    const fresh = el.dataset.val === 'whatsapp' ? waUrl(c.whatsapp || c.phone, text) : phoneMail() && c.email ? mailHref(c.email, followUpSubject(b), text) : '';
+    const b = S.businesses.get(id); if (!b) return; const c = contactOf(b); const L = { ...(S.layer || {}) }; const text = String(fv('fu.text', msgDefault(b, L)));
+    const fresh = el.dataset.val === 'whatsapp' ? waUrl(c.whatsapp || c.phone, text) : phoneMail() && c.email ? mailHref(c.email, msgSubject(b, L), text) : '';
     if (fresh) el.href = fresh;
-    setTimeout(async () => { if (await noteFollowUp(id, el.dataset.val, text)) { clearForm('fu.'); if (S.layer && S.layer.kind === 'followup') closeLayer(); toast(`Noted: you followed up ${b.name}`); } }, 400);
+    setTimeout(async () => { if (await noteMsg(id, el.dataset.val, text, L)) { clearForm('fu.'); if (S.layer && S.layer.kind === 'followup') closeLayer(); toast((L.mode || 'follow') === 'follow' ? `Noted: you followed up ${b.name}` : `Noted: sent to ${b.name}`); } }, 400);
     return;
   }
   if (el.tagName === 'A' && act !== 'go') return;
@@ -5975,18 +6548,25 @@ async function onClick(e) {
     case 'design-photos': openLayer({ kind: 'dphotos', id }); break;
     case 'domain-check': await runDomainCheck(true); break;
     case 'brake-clear': if (await write(() => saveSettings({ sending: { ...settings().sending, brakeClearedAt: nowIso() } }))) toast('Sending resumed. The app keeps watching for bounces and complaints.'); break;
-    case 'followup': clearForm('fu.'); openLayer({ kind: 'followup', id }); break;
+    case 'followup': clearForm('fu.'); openLayer({ kind: 'followup', id, mode: 'follow' }); break;
     case 'dimport-go': await importDesigns(); break;
     case 'design-template': saveFile('ark-diamond-designs-template.csv', toCSV(DESIGN_TEMPLATE)); break;
-    case 'fu-copy': { const b = S.businesses.get(id); if (b) await copyText(String(fv('fu.text', followUpText(b, docLang(b))))); break; }
+    case 'fu-copy': { const b = S.businesses.get(id); if (b) await copyText(String(fv('fu.text', msgDefault(b)))); break; }
     case 'fu-gmail': {
-      const b = S.businesses.get(id); if (!b) break; const to = String(contactOf(b).email || '').trim(); const text = String(fv('fu.text', followUpText(b, docLang(b))));
+      const b = S.businesses.get(id); if (!b) break; const L = { ...(S.layer || {}) }; const to = String(contactOf(b).email || '').trim(); const text = String(fv('fu.text', msgDefault(b, L)));
       if (!to || isSuppressed(to)) { toast(gmailError({ code: to ? 'suppressed' : 'no_email' })); break; }
-      const r = await gmailCall('send_message', { to: [to], subject: followUpSubject(b), body: text });
+      const r = await gmailCall('send_message', { to: [to], subject: msgSubject(b, L), body: text });
       if (!r.ok) { toast(gmailError(r)); break; }
-      if (await noteFollowUp(id, 'email', text)) { clearForm('fu.'); closeLayer(); toast(`Follow-up sent to ${b.name}`); }
+      if (await noteMsg(id, 'email', text, L)) { clearForm('fu.'); closeLayer(); toast((L.mode || 'follow') === 'follow' ? `Follow-up sent to ${b.name}` : `Sent to ${b.name}`); }
       break;
     }
+    case 'msg': {
+      const b = S.businesses.get(id); if (!b) break; const mode = el.dataset.mode || 'follow'; clearForm('fu.');
+      if (mode !== 'follow') await ensureShopPage(b);
+      openLayer({ kind: 'followup', id, mode, ref: el.dataset.ref || '' }); break;
+    }
+    case 'page-copy': { const b = S.businesses.get(id); const link = b ? await ensureShopPage(b) : ''; if (link) await copyText(link); else toast('Their page works once the app is on your phone.'); break; }
+    case 'cpage-copy': { const b = S.businesses.get(id); const link = b ? await ensureShopPage(b, true) : ''; if (link) await copyText(link); else toast('The customer view works once the app is on your phone.'); break; }
     case 'design-edit': S.form = {}; openLayer({ kind: 'design', id }); break;
     case 'dsel-clear': S.designSel.clear(); render(); break;
     case 'catalogue-publish': await publishCatalogue(); break;
@@ -6005,6 +6585,11 @@ async function onClick(e) {
         for (const key of ['kit.price', 'kit.credit', 'kit.on']) delete S.form[key];
         toast(on ? 'Sample kit saved and offered' : 'Sample kit saved'); if (settings().catalogue.publishedAt) await publishCatalogue(true);
       }
+      break;
+    }
+    case 'video-remove': {
+      if (!armed(el.dataset.key)) break; const d = S.prices.get(id); if (!d || !d.video) break; const old = d.video;
+      if (await write(() => Data.update('prices', id, { video: null, updatedAt: nowIso() }))) { removeMedia(old); toast('Video removed'); }
       break;
     }
     case 'photo-remove': {
@@ -6185,21 +6770,40 @@ async function onClick(e) {
 
     /* quotes */
     case 'quote-new': { const b0 = S.businesses.get(id); const cur = currencyFor((b0 && b0.country) || ''); S.quoteDraft = { businessId: id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines: [{ desc: '', qty: 1, price: '' }], shipping: '', notes: '', usdRate: fxUsd(cur) || '', landed: landedDefault(b0) }; openLayer({ kind: 'quote', businessId: id }); break; }
+    case 'requote': {
+      const q = S.quotes.get(id); if (!q) break;
+      S.quoteDraft = { ...clone(q), id: q.id, lines: repriceLines(q.lines, q.currency), validUntil: addDays(todayStr(), 14), sentAt: null };
+      openLayer({ kind: 'quote', id: q.id, businessId: q.businessId }); toast("Prices are at today's rates and valid 14 days. Check them, then save as sent and send it again."); break;
+    }
+    case 'reprice': {
+      const o = S.orders.get(id); if (!o) break;
+      S.orderDraft = { ...clone(o), id: o.id, buyer: { ...clone(o.buyer || {}) }, lines: repriceLines(o.lines, o.currency), driftOk: null };
+      openLayer({ kind: 'orderform', id: o.id }); toast("Prices are at today's rates. Save, then email the proforma again."); break;
+    }
+    case 'drift-keep': {
+      const coll = el.dataset.kind === 'order' ? 'orders' : 'quotes';
+      if (await write(() => Data.update(coll, id, { driftOk: { at: nowIso(), pct: Number(el.dataset.val) || 0 } }))) toast(`Kept. You'll hear again if it moves another ${driftLimit()}%.`);
+      break;
+    }
     case 'quote-edit': { const q = S.quotes.get(id); if (!q) break; S.quoteDraft = { ...clone(q), id: q.id, lines: clone(q.lines || []).length ? clone(q.lines) : [{ desc: '', qty: 1, price: '' }] }; openLayer({ kind: 'quote', id, businessId: q.businessId }); break; }
     case 'ql-add': if (S.quoteDraft) { S.quoteDraft.lines.push({ desc: '', qty: 1, price: '' }); render(); const i = S.quoteDraft.lines.length - 1; const f = document.getElementById(`ql-${i}-d`); if (f) f.focus(); } break;
     case 'ql-remove': if (S.quoteDraft && S.quoteDraft.lines.length > 1) { S.quoteDraft.lines.splice(Number(el.dataset.val), 1); render(); } break;
     case 'quote-save': {
       const d = S.quoteDraft; if (!d) break;
-      const lines = d.lines.map((l) => ({ desc: String(l.desc || '').trim(), qty: Number(l.qty) || 0, price: Number(l.price) || 0 })).filter((l) => l.desc || l.price);
+      const lines = d.lines.map((l) => ({ desc: String(l.desc || '').trim(), qty: Number(l.qty) || 0, price: Number(l.price) || 0, ...(l.designId ? { designId: l.designId } : {}) })).filter((l) => l.desc || l.price);
+      const qb = S.businesses.get(d.businessId); const pr = settings().pricing;
       if (!lines.length) { toast('Add at least one item with a price.'); break; }
       const status = el.dataset.val === 'sent' ? (['accepted', 'declined'].includes(d.status) ? d.status : 'sent') : d.status || 'draft';
-      const doc = { businessId: d.businessId, number: d.number || nextQuoteNumber(), currency: d.currency || 'USD', incoterm: d.incoterm || 'FOB', validUntil: d.validUntil || '', lines, shipping: Number(d.shipping) || 0, notes: String(d.notes || ''), usdRate: d.currency === 'USD' ? 1 : Number(d.usdRate) || 0, status, landed: d.landed && d.landed.on ? { on: true, dutyPct: Math.max(0, Number(d.landed.dutyPct) || 0), vatPct: Math.max(0, Number(d.landed.vatPct) || 0), clearance: Math.max(0, Number(d.landed.clearance) || 0) } : { on: false }, requestId: d.requestId || null, createdAt: d.createdAt || nowIso(), sentAt: status === 'sent' ? d.sentAt || nowIso() : d.sentAt || null, decidedAt: d.decidedAt || null, isExample: !!d.isExample };
+      const doc = { businessId: d.businessId, number: d.number || nextQuoteNumber(), currency: d.currency || 'USD', incoterm: d.incoterm || 'FOB', validUntil: d.validUntil || '', lines, shipping: Number(d.shipping) || 0, notes: String(d.notes || ''), usdRate: d.currency === 'USD' ? 1 : Number(d.usdRate) || 0, status, landed: d.landed && d.landed.on ? { on: true, dutyPct: Math.max(0, Number(d.landed.dutyPct) || 0), vatPct: Math.max(0, Number(d.landed.vatPct) || 0), clearance: Math.max(0, Number(d.landed.clearance) || 0) } : { on: false }, requestId: d.requestId || null, createdAt: d.createdAt || nowIso(), sentAt: status === 'sent' ? d.sentAt || nowIso() : d.sentAt || null, decidedAt: d.decidedAt || null, isExample: !!d.isExample,
+        gst: quoteGstFor(d, qb), basis: { gold24: Number(pr.gold24) || 0, silver: Number(pr.silver) || 0, rate: d.currency === 'INR' ? 1 : Number((pr.rates || {})[d.currency]) || 0, at: pr.ratesAt || '' },
+        ...(d.acceptedVia ? { acceptedVia: d.acceptedVia, acceptedAt: d.acceptedAt || null, acceptNote: d.acceptNote || '' } : {}) };
       const qid = d.id || Data.newId('quotes');
       if (await write(() => Data.set('quotes', qid, doc))) {
         await ensureLead(d.businessId, 'quoted');
         if (d.requestId && S.requests.has(d.requestId)) await write(() => Data.update('requests', d.requestId, { status: 'quoted', quoteId: qid, doneAt: nowIso() }));
+        if (status === 'sent' && qb && !qb.track) await ensureShopPage(qb);
         S.quoteDraft = null; S.layer = { kind: 'biz', id: d.businessId }; render();
-        toast(status === 'sent' ? `Quote ${doc.number} saved as sent. Copy it into your reply.` : `Quote ${doc.number} saved as a draft`);
+        toast(status === 'sent' ? `Quote ${doc.number} saved as sent. Send it with its link, or copy it into your reply.` : `Quote ${doc.number} saved as a draft`);
       }
       break;
     }
@@ -6216,7 +6820,50 @@ async function onClick(e) {
 
     /* orders */
     case 'order-new': { const b = id ? S.businesses.get(id) : null; S.orderDraft = newOrderDraft(b); openLayer({ kind: 'orderform' }); break; }
-    case 'order-from-quote': { const q = S.quotes.get(id); const b = q && S.businesses.get(q.businessId); if (!b) break; S.orderDraft = orderFromQuote(q, b); openLayer({ kind: 'orderform' }); break; }
+    case 'order-from-quote': {
+      let q = S.quotes.get(id); const b = q && S.businesses.get(q.businessId); if (!b) break;
+      // a quote the shop accepted on its page counts in its order value once, when you make the proforma
+      if (q.acceptedVia === 'link' && !q.loggedAt) { const usd = quoteUsd(q); if (usd > 0) await logOrder(q.businessId, Math.round(usd), true); else await ensureLead(q.businessId, 'first_order'); await write(() => Data.update('quotes', id, { loggedAt: nowIso() })); q = S.quotes.get(id) || q; }
+      S.orderDraft = orderFromQuote(q, b); openLayer({ kind: 'orderform' }); break;
+    }
+    case 'accepted-seen': if (await write(() => Data.update('quotes', id, { acceptSeenAt: nowIso() }))) toast('Done'); break;
+    case 'cad-ok': case 'cad-seen': {
+      const o = S.orders.get(id); if (!o) break; const cad = clone(o.cad || []); const c = cad.find((x) => x.id === el.dataset.val); if (!c) break;
+      if (act === 'cad-ok') c.answer = { decision: 'ok', comment: '', at: nowIso(), by: 'you', seenAt: nowIso() }; else if (c.answer) c.answer.seenAt = nowIso(); else break;
+      if (await write(() => Data.update('orders', id, { cad, updatedAt: nowIso() }))) toast(act === 'cad-ok' ? 'Noted: they approved it' : 'Seen');
+      break;
+    }
+    case 'sold-seen': { const o = S.orders.get(id); if (o && o.sold && (await write(() => Data.update('orders', id, { sold: { ...o.sold, seenAt: nowIso() } })))) toast('Seen'); break; }
+    case 'sold-note': S.ui.orderPanel = 'sold'; clearForm('sd.'); openLayer({ kind: 'order', id }); break;
+    case 'sold-save': {
+      const o = S.orders.get(id); if (!o) break;
+      const lines = (o.lines || []).map((l, i) => Math.max(0, Math.min(Number(l.qty) || 0, Math.round(Number(fv('sd.' + i, (o.sold && o.sold.lines[i]) || 0)) || 0))));
+      if (await write(() => Data.update('orders', id, { sold: { at: nowIso(), by: 'you', lines, seenAt: nowIso() }, updatedAt: nowIso() }))) { clearForm('sd.'); S.ui.orderPanel = ''; toast(`Noted: ${lines.reduce((a, n) => a + n, 0)} sold. Your best sellers move up in the catalogue when you update it.`); }
+      break;
+    }
+    case 'ofile-remove': {
+      if (!armed(el.dataset.key)) break; const o = S.orders.get(id); if (!o) break; const [kind, fid] = String(el.dataset.val || '').split(':');
+      if (kind === 'cad') {
+        const c = (o.cad || []).find((x) => x.id === fid); if (!c) break;
+        if (await write(() => Data.update('orders', id, { cad: (o.cad || []).filter((x) => x.id !== fid), updatedAt: nowIso() }))) { if (c.photo) { Data.remove('photos', c.photo.id).catch(() => {}); Data.remove('photos', c.photo.thumb).catch(() => {}); } if (c.media) removeMedia(c.media); toast('Drawing removed'); }
+      } else {
+        const ph = (o.finished || []).find((x) => x.id === fid); if (!ph) break;
+        if (await write(() => Data.update('orders', id, { finished: (o.finished || []).filter((x) => x.id !== fid), updatedAt: nowIso() }))) { Data.remove('photos', ph.id).catch(() => {}); Data.remove('photos', ph.thumb).catch(() => {}); toast('Photo removed'); }
+      }
+      break;
+    }
+    case 'tax-make': {
+      const o = S.orders.get(id); if (!o) break; const x = taxOf(o);
+      if (!x.number) { toast('Add the invoice number.'); break; }
+      if (x.number.length > 16) { toast('GST invoice numbers can have up to 16 characters.'); break; }
+      if (x.gstin && !gstinOk(x.gstin)) { toast("That GSTIN doesn't look right: check it."); break; }
+      if (!x.state) { toast('Choose their state, for the place of supply.'); break; }
+      const gst = { pct: GST_JEWELLERY, kind: x.state === sellerState() ? 'local' : 'igst' };
+      const next = { ...o, gst, tax: { ...x, madeAt: (o.tax && o.tax.madeAt) || nowIso() }, buyer: { ...(o.buyer || {}), gstin: x.gstin || (o.buyer || {}).gstin || '', state: x.state } };
+      if (!(await write(() => Data.update('orders', id, { tax: next.tax, gst, buyer: next.buyer, ...orderSums(next), updatedAt: nowIso() })))) break;
+      clearForm('tx.'); saveFile(taxFileName(next), taxInvoicePdf(next)); toast(`Tax invoice ${x.number} made`);
+      break;
+    }
     case 'order-open': S.ui.orderPanel = ''; clearForm('pay.', 'ship.', 'pm.', 'ex.'); openLayer({ kind: 'order', id }); break;
     case 'order-edit': { const o = S.orders.get(id); if (!o) break; S.orderDraft = { ...clone(o), id: o.id, buyer: { ...clone(o.buyer || {}) }, lines: (o.lines || []).length ? clone(o.lines) : [{ desc: '', hs: '', qty: 1, price: '' }] }; openLayer({ kind: 'orderform', id }); break; }
     case 'ol-add': if (S.orderDraft) { S.orderDraft.lines.push({ desc: '', hs: '', qty: 1, price: '' }); render(); const f = document.getElementById(`ol-${S.orderDraft.lines.length - 1}-d`); if (f) f.focus(); } break;
@@ -6262,7 +6909,7 @@ async function onClick(e) {
       render(); toast(r.ok ? (mode === 'send' ? 'Proforma sent from Gmail' : 'Saved in your Gmail drafts') : gmailError(r));
       break;
     }
-    case 'order-cancel': { if (!armed(el.dataset.key)) break; if (await write(() => Data.update('orders', id, { status: 'cancelled', statusAt: { cancelled: nowIso() }, updatedAt: nowIso() }))) toast('Order cancelled'); break; }
+    case 'order-cancel': { if (!armed(el.dataset.key)) break; if (await write(() => Data.update('orders', id, { status: 'cancelled', statusAt: { cancelled: nowIso() }, updatedAt: nowIso() }))) { const back = S.orders.get(id) && S.orders.get(id).stockTaken; await giveStock(S.orders.get(id)); toast(back ? 'Order cancelled. Its pieces are back in ready stock.' : 'Order cancelled'); } break; }
     case 'order-delete': {
       if (!armed(el.dataset.key)) break; const o = S.orders.get(id); if (!o) break;
       if ((o.payments || []).length) { toast('This order has payments, so cancel it instead.'); break; }
@@ -6523,7 +7170,7 @@ function onInput(e) {
     if (k === 'currency') d.usdRate = fxUsd(el.value) || '';
     if (el.tagName === 'SELECT') schedule(); else if (e.type === 'input') scheduleQuiet();
   }
-  if (el.dataset.ob && S.orderDraft) { S.orderDraft.buyer = { ...(S.orderDraft.buyer || {}), [el.dataset.ob]: el.value }; if (el.dataset.ob === 'country') scheduleQuiet(); }
+  if (el.dataset.ob && S.orderDraft) { S.orderDraft.buyer = { ...(S.orderDraft.buyer || {}), [el.dataset.ob]: el.value }; if (['country', 'state', 'gstin'].includes(el.dataset.ob)) { if (el.tagName === 'SELECT') schedule(); else scheduleQuiet(); } }
   if (el.dataset.ol && S.orderDraft) { const [i, f] = el.dataset.ol.split('.'); const line = S.orderDraft.lines[Number(i)]; if (line) line[f] = el.value; if (e.type === 'input' && f !== 'hs') scheduleQuiet(); }
   if (el.dataset.pc) { S.pc[el.dataset.pc] = el.value; if (el.tagName === 'SELECT') schedule(); else if (e.type === 'input') scheduleQuiet(350); }
   if (el.dataset.rt) { S.rt[el.dataset.rt] = el.value; if (el.tagName === 'SELECT') schedule(); else if (e.type === 'input') scheduleQuiet(350); }
@@ -6555,6 +7202,8 @@ async function onChange(e) {
   if (el.dataset.dcur) { S.ui.designCur = el.value; render(); }
   if (el.dataset.dlang) { S.ui.designLang = el.value; render(); }
   if (el.dataset.photos && el.files && el.files.length) { const files = [...el.files]; el.value = ''; await addPhotos(el.dataset.photos, files); }
+  if (el.dataset.video && el.files && el.files.length) { const f = el.files[0]; el.value = ''; await addVideo(el.dataset.video, f); }
+  if (el.dataset.ofiles && el.files && el.files.length) { const [oid, kind] = el.dataset.ofiles.split(':'); const files = [...el.files]; el.value = ''; if (['cad', 'finished'].includes(kind)) await addOrderFiles(oid, kind, files); }
   if (el.dataset.dphotos && el.files && el.files.length) { const files = [...el.files]; el.value = ''; await addPhotosBulk(files); }
   if (el.dataset.dimport && el.files && el.files[0]) { const file = el.files[0]; el.value = ''; await readDesignFile(file); }
   if (el.dataset.photoclean) { if (await write(() => saveSettings({ photoClean: el.checked }))) toast(el.checked ? 'New photos are tidied as they go in' : 'New photos go in as they are'); }
@@ -6589,14 +7238,14 @@ async function onSubmit(e) {
   if (kind === 'design') {
     const d = S.prices.get(S.layer.id); if (!d) { closeLayer(); return; }
     const code = String(fv('de.code', (d.inputs || {}).code || '')).trim(); if (!code) { toast('Add a code or name.'); return; }
-    const cat = fv('de.cat', d.category || ''); const patch = { inputs: { ...(d.inputs || {}), code }, category: DESIGN_CAT_LABEL[cat] ? cat : '', note: String(fv('de.note', d.note || '')).trim().slice(0, 500), hidden: !fv('de.show', !d.hidden), updatedAt: nowIso() };
+    const cat = fv('de.cat', d.category || ''); const patch = { inputs: { ...(d.inputs || {}), code }, category: DESIGN_CAT_LABEL[cat] ? cat : '', note: String(fv('de.note', d.note || '')).trim().slice(0, 500), hidden: !fv('de.show', !d.hidden), ready: Math.max(0, Math.min(999, Math.round(Number(fv('de.ready', d.ready || 0)) || 0))), updatedAt: nowIso() };
     if (await write(() => Data.update('prices', d.id, patch))) { S.form = {}; closeLayer(); toast('Saved'); }
     return;
   }
   if (kind === 'dquote') {
     const b = S.businesses.get(fv('dq.buyer', '')); if (!b) { toast('Choose the shop to quote.'); return; }
-    const cur = designCur(); const r = pcRates(); const list = selectedDesigns();
-    const lines = list.map((d) => ({ desc: localTerms(pcDesc(d.inputs || {}), b.country), qty: 1, price: calcPrice({ ...(d.inputs || {}) }, r).fx[cur] || '' }));
+    const cur = inIndia(b.country) ? 'INR' : designCur(); const r = pcRates(); const list = selectedDesigns();
+    const lines = list.map((d) => ({ desc: localTerms(pcDesc(d.inputs || {}), b.country), qty: 1, price: calcPrice({ ...(d.inputs || {}) }, r).fx[cur] || '', designId: d.id }));
     if (lines.some((l) => !l.price)) toast(`Some designs have no price in ${cur} yet: add today's rates in Prices.`);
     S.form = {}; S.quoteDraft = { businessId: b.id, currency: cur, incoterm: 'DAP', validUntil: addDays(todayStr(), 14), lines, shipping: '', notes: '', usdRate: fxUsd(cur) || '', landed: landedDefault(b) };
     openLayer({ kind: 'quote', businessId: b.id }); return;
@@ -6836,6 +7485,6 @@ async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAuto(); });
   });
 }
-window.__facet = { checkEmails, emailBad, emailCheckOf, domainTakesMail, launchItems, launchCard, ratesProposal, queueAutoPublish, newRequests, quoteFromRequest, shopFromRequest, landedOf, landedLines, landedHtml, quoteText, quoteHtmlFile, publishCatalogue, catalogueDoc, catalogueLink, catalogueReady, sampleKit, sampleOffer, kitPriceIn, shopPrice, retailOf, claudeDraft, viewedDesigns, ingestThreads, processInbox, S, Data, resumeFind, quickShops, locateCity, overpass, requestResearch, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag, currencyFor, ratesCheckLine, fitScore, fitWhy, interestOf, followUpText, capOn, firstSentDay, warmupNote, sendingHealth, checkDomain, domainAuthOk, runDomainCheck, docLang, isQuebec, designLang, pcDescFr, fxFmtFr, readXlsx, designRowsFrom, readDesignFile, importDesigns, numFrom, metalFrom, colField, photoMatcher, addPhotosBulk, tidyPhoto, photoPair, lineWeights, originPdf, audienceList };
+window.__facet = { checkEmails, emailBad, emailCheckOf, domainTakesMail, launchItems, launchCard, ratesProposal, queueAutoPublish, newRequests, quoteFromRequest, shopFromRequest, landedOf, landedLines, landedHtml, quoteText, quoteHtmlFile, publishCatalogue, catalogueDoc, catalogueLink, catalogueReady, sampleKit, sampleOffer, kitPriceIn, shopPrice, retailOf, claudeDraft, viewedDesigns, ingestThreads, processInbox, S, Data, resumeFind, quickShops, locateCity, overpass, requestResearch, emailText, fill, checkTracking, trackingOn, exportPdf, exportOf, ciNumber, makeExportPapers, focusNow, setFocus, startCampaign, campaignPlan, shopState, onlineOf, moreOf, allShopsOf, designsPdf, photoBin, pdfDoc, bestForLetters, lettersPdf, postLines, trackedLink, opensOf, hotShops, logCall, afterScan, startCityResearch, remindersDue, myName, historyOf, similarShops, reorderGap, stepApplies, loadTeam, meetingsToday, render, placeKey, shopFrom, showroomReport, showroomQuery, findShowrooms, addShops, showroomsPdf, buyerIndex, buyerFor, MAPV, mergeShop, applyResearch, logReply, startSequence, markStep, todayData, settings, stepsFor, seqKindOf, localInfo, calcPrice, pcDesc, piPdf, piMail, amountWords, pdfWidth, pdfWrap, orderTotal, orderAdvance, orderPaid, orderTodo, nextPiNumber, finYear, fxUsd, autoSendable, gmailSync, gmailAuto, planStops, tripDay, postcodeOf, stripQuoted, guessTag, currencyFor, ratesCheckLine, fitScore, fitWhy, interestOf, followUpText, capOn, firstSentDay, warmupNote, sendingHealth, checkDomain, domainAuthOk, runDomainCheck, docLang, isQuebec, designLang, pcDescFr, fxFmtFr, readXlsx, designRowsFrom, readDesignFile, importDesigns, numFrom, metalFrom, colField, photoMatcher, addPhotosBulk, tidyPhoto, photoPair, lineWeights, originPdf, audienceList, driftOf, driftList, shopAnswers, salesDue, takeStock, giveStock, taxOf, taxInvoicePdf, nextTaxNo, gstinOk, gstFor, buyerStateOf, quoteGst, orderGst, orderTaxable, draftGst, soldByDesign, bestSellers, lineDesign, shopPage, customerPage, ensureShopPage, msgDefault, msgSubject, reorderText, salesText, shrinkVideo, recorderType, addVideo, saveMedia, addOrderFiles, orderFromQuote, repriceLines, savedRates, quoteGstFor, isVideoFile, noteMsg, setOrderStatus };
 init();
 })();
